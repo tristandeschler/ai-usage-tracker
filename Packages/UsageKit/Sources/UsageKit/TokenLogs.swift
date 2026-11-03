@@ -26,20 +26,34 @@ public struct TokenCounts: Codable, Hashable, Sendable {
 
 public struct TokenTotals: Codable, Hashable, Sendable {
     public var today = TokenCounts()
+    /// Today plus the six calendar days before it.
     public var lastSevenDays = TokenCounts()
+    /// Total tokens per calendar day, oldest first, ending today. Optional so older caches still decode.
+    public var daily: [Int]?
 
-    public init(today: TokenCounts = TokenCounts(), lastSevenDays: TokenCounts = TokenCounts()) {
+    public init(today: TokenCounts = TokenCounts(), lastSevenDays: TokenCounts = TokenCounts(), daily: [Int]? = nil) {
         self.today = today
         self.lastSevenDays = lastSevenDays
+        self.daily = daily
+    }
+
+    /// Average of the six days before today, for comparing today against.
+    public var previousDailyAverage: Double? {
+        guard let daily, daily.count > 1 else { return nil }
+        let previous = daily.dropLast()
+        let average = Double(previous.reduce(0, +)) / Double(previous.count)
+        return average > 0 ? average : nil
     }
 
     public static func summing(_ events: [TokenEvent], now: Date = Date(), calendar: Calendar = .current) -> TokenTotals {
         let startOfToday = calendar.startOfDay(for: now)
-        let weekAgo = now.addingTimeInterval(-7 * 86_400)
-        var totals = TokenTotals()
-        for event in events where event.timestamp >= weekAgo && event.timestamp <= now {
+        guard let start = calendar.date(byAdding: .day, value: -6, to: startOfToday) else { return TokenTotals() }
+        var totals = TokenTotals(daily: Array(repeating: 0, count: 7))
+        for event in events where event.timestamp >= start && event.timestamp <= now {
             totals.lastSevenDays = totals.lastSevenDays + event.counts
             if event.timestamp >= startOfToday { totals.today = totals.today + event.counts }
+            let day = calendar.dateComponents([.day], from: start, to: calendar.startOfDay(for: event.timestamp)).day ?? 0
+            if (0..<7).contains(day) { totals.daily?[day] += event.counts.total }
         }
         return totals
     }

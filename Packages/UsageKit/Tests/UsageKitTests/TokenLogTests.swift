@@ -40,10 +40,13 @@ import Testing
         let totals = TokenTotals.summing([
             at("2026-11-03T08:00:00Z", 5),   // today
             at("2026-11-02T23:00:00Z", 7),   // yesterday
-            at("2026-10-25T12:00:00Z", 100), // older than 7 days
+            at("2026-10-28T09:00:00Z", 3),   // six days ago, the first day counted
+            at("2026-10-27T23:00:00Z", 100), // seven days ago, not counted
         ], now: now, calendar: calendar)
         #expect(totals.today.total == 5)
-        #expect(totals.lastSevenDays.total == 12)
+        #expect(totals.lastSevenDays.total == 15)
+        #expect(totals.daily == [3, 0, 0, 0, 0, 7, 5])
+        #expect(totals.previousDailyAverage == 10.0 / 6)
     }
 
     @Test func claudeAppBreakdown() throws {
