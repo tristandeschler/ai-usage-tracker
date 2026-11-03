@@ -54,6 +54,20 @@ jobs:
         if: steps.version.outputs.skip != 'true'
         run: swift test --package-path Packages/UsageKit
 
+      # Installed before the key is available, so Homebrew never has access to it.
+      - name: Install XcodeGen
+        if: steps.version.outputs.skip != 'true'
+        run: brew install xcodegen
+
+      - name: Write the build settings
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          cat > Config/Local.xcconfig <<CONFIG
+          DEVELOPMENT_TEAM = ${{ vars.DEVELOPMENT_TEAM }}
+          TT_BUNDLE_PREFIX = ${{ vars.TT_BUNDLE_PREFIX }}
+          TT_ENTITLEMENTS = Apps/Mac/TokenTracker.entitlements
+          CONFIG
+
       - name: Build, notarize and publish
         if: steps.version.outputs.skip != 'true'
         env:
@@ -64,14 +78,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           PUBLISH: "1"
         run: |
-          brew install xcodegen
-          cat > Config/Local.xcconfig <<CONFIG
-          DEVELOPMENT_TEAM = ${{ vars.DEVELOPMENT_TEAM }}
-          TT_BUNDLE_PREFIX = ${{ vars.TT_BUNDLE_PREFIX }}
-          TT_ENTITLEMENTS = Apps/Mac/TokenTracker.entitlements
-          CONFIG
           export ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
-          printf '%s' "$ASC_KEY_P8" > "$ASC_KEY_PATH"
+          (umask 077; printf '%s' "$ASC_KEY_P8" > "$ASC_KEY_PATH")
+          trap 'rm -f "$ASC_KEY_PATH"' EXIT
           export RELEASE_NOTES="$(git log -1 --format=%B)"
           Scripts/release.sh
-          rm -f "$ASC_KEY_PATH"
