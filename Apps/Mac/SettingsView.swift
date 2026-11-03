@@ -30,12 +30,22 @@ private struct AccountsSettings: View {
                 ForEach(model.accounts) { account in
                     AccountRow(account: account) { renaming = account }
                         .tag(account.id)
-                        .contextMenu {
-                            Button("Rename…") { renaming = account }
-                            Button("Remove", role: .destructive) { model.remove(account) }
-                        }
                 }
                 .onMove { model.move(from: $0, to: $1) }
+            }
+            // List-level menu and double-click; a per-row tap gesture would swallow drag-to-reorder.
+            .contextMenu(forSelectionType: UUID.self) { ids in
+                if let account = model.accounts.first(where: { ids.contains($0.id) }) {
+                    Button("Rename…") { renaming = account }
+                    Button("Move Up") { model.move(account, by: -1) }
+                        .disabled(account.id == model.accounts.first?.id)
+                    Button("Move Down") { model.move(account, by: 1) }
+                        .disabled(account.id == model.accounts.last?.id)
+                    Divider()
+                    Button("Remove", role: .destructive) { model.remove(account) }
+                }
+            } primaryAction: { ids in
+                renaming = model.accounts.first { ids.contains($0.id) }
             }
             .overlay {
                 if model.accounts.isEmpty {
@@ -141,8 +151,6 @@ private struct AccountRow: View {
             .controlSize(.small)
         }
         .padding(.vertical, 4)
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2, perform: onRename)
     }
 
     private var detail: String {

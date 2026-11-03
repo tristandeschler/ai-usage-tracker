@@ -245,6 +245,14 @@ final class AppModel {
         saveAccounts()
     }
 
+    func move(_ account: AccountConfig, by delta: Int) {
+        guard let index = accounts.firstIndex(where: { $0.id == account.id }) else { return }
+        let target = index + delta
+        guard accounts.indices.contains(target) else { return }
+        accounts.swapAt(index, target)
+        saveAccounts()
+    }
+
     /// Checks a web session against the provider, then stores it and adds the account, named after
     /// the identity the provider reports. Returns an error message instead when the session doesn't work.
     func addWebAccount(source: CredentialSource, cookieHeader: String, userAgent: String?, suggestedName: String?) async -> String? {
