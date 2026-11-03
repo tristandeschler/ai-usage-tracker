@@ -85,12 +85,12 @@ public enum ClaudeUsageParser {
         }
     }
 
-    /// Turns `subscriptionType`/`rateLimitTier` from Claude Code's credentials into e.g. "Ultra".
+    /// Turns `subscriptionType`/`rateLimitTier` from Claude Code's credentials into e.g. "Max".
     public static func planName(subscriptionType: String?, rateLimitTier: String?) -> String? {
-        if let tier = rateLimitTier?.lowercased(), let range = tier.range(of: #"max_(\d+)x"#, options: .regularExpression) {
-            let multiplier = tier[range].dropFirst(4).dropLast()
-            // The 20x tier was renamed Ultra; its tier string still says max_20x.
-            return multiplier == "20" ? "Ultra" : "Max \(multiplier)x"
+        // Every Max tier (5x, 20x, and the 20x tier's newer "Ultra" name) is shown as plain "Max".
+        let type = subscriptionType?.lowercased() ?? ""
+        if type == "max" || type == "ultra" || rateLimitTier?.lowercased().contains("max_") == true {
+            return "Max"
         }
         guard let type = subscriptionType, !type.isEmpty else { return nil }
         return type.prefix(1).uppercased() + type.dropFirst()

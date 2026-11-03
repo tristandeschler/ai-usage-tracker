@@ -32,10 +32,10 @@ func fixture(_ name: String) throws -> Data {
     }
 
     @Test func planNames() {
-        #expect(ClaudeUsageParser.planName(subscriptionType: "max", rateLimitTier: "default_claude_max_20x") == "Ultra")
-        #expect(ClaudeUsageParser.planName(subscriptionType: "max", rateLimitTier: "default_claude_max_5x") == "Max 5x")
+        #expect(ClaudeUsageParser.planName(subscriptionType: "max", rateLimitTier: "default_claude_max_20x") == "Max")
+        #expect(ClaudeUsageParser.planName(subscriptionType: "max", rateLimitTier: "default_claude_max_5x") == "Max")
         #expect(ClaudeUsageParser.planName(subscriptionType: "pro", rateLimitTier: nil) == "Pro")
-        #expect(ClaudeUsageParser.planName(subscriptionType: "ultra", rateLimitTier: "default_claude_ultra") == "Ultra")
+        #expect(ClaudeUsageParser.planName(subscriptionType: "ultra", rateLimitTier: "default_claude_ultra") == "Max")
         #expect(ClaudeUsageParser.planName(subscriptionType: nil, rateLimitTier: nil) == nil)
     }
 
