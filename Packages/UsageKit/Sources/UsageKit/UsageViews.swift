@@ -211,6 +211,10 @@ public struct AccountCard: View {
             if snapshot.spend != nil || snapshot.tokens != nil {
                 APIUsageSection(spend: snapshot.spend, tokens: snapshot.tokens, provider: snapshot.provider, now: now)
             }
+            if let keys = snapshot.apiKeys, !keys.isEmpty {
+                Divider().opacity(0.5)
+                APIKeyBreakdown(keys: keys, provider: snapshot.provider)
+            }
             if let shares = snapshot.appShares, !shares.isEmpty {
                 Divider().opacity(0.5)
                 AppShareBar(shares: shares)

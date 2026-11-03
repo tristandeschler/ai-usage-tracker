@@ -14,10 +14,29 @@ public struct SpendTotals: Codable, Hashable, Sendable {
     }
 }
 
+/// Tokens used through one API key. The providers don't report spend per key.
+public struct APIKeyUsage: Codable, Hashable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var today: Int
+    public var lastSevenDays: Int
+
+    public init(id: String, name: String, today: Int, lastSevenDays: Int) {
+        self.id = id
+        self.name = name
+        self.today = today
+        self.lastSevenDays = lastSevenDays
+    }
+}
+
 /// Organization-wide API usage from the Anthropic and OpenAI admin APIs. These need an
 /// admin key; ordinary API keys can't read usage.
 public enum AdminAPIUsage {
     static let days = 7
+
+    /// Token counts per API key id ("" for usage without a key, like the Anthropic Console),
+    /// each with one entry per UTC day, oldest first.
+    typealias PerKey = [String: [TokenCounts]]
 
     /// UTC midnight six days ago through now. Both APIs bucket by UTC day.
     static func range(now: Date) -> (start: Date, end: Date) {
@@ -35,33 +54,58 @@ public enum AdminAPIUsage {
         return (0..<days).contains(index) ? index : nil
     }
 
-    static func totals(_ perDay: [TokenCounts]) -> TokenTotals {
-        TokenTotals(
+    static func totals(_ perKey: PerKey) -> TokenTotals {
+        var perDay = Array(repeating: TokenCounts(), count: days)
+        for counts in perKey.values {
+            for (day, value) in counts.enumerated() { perDay[day] = perDay[day] + value }
+        }
+        return TokenTotals(
             today: perDay.last ?? TokenCounts(),
             lastSevenDays: perDay.reduce(TokenCounts(), +),
             daily: perDay.map(\.total)
         )
     }
 
+    /// Per-key totals, busiest first, named from `names` where the provider knows them.
+    static func keys(_ perKey: PerKey, names: [String: String], unattributed: String) -> [APIKeyUsage] {
+        perKey.map { id, counts in
+            APIKeyUsage(
+                id: id,
+                name: id.isEmpty ? unattributed : names[id] ?? "Key …\(id.suffix(6))",
+                today: counts.last?.total ?? 0,
+                lastSevenDays: counts.reduce(0) { $0 + $1.total }
+            )
+        }
+        .filter { $0.lastSevenDays > 0 }
+        .sorted { $0.lastSevenDays > $1.lastSevenDays }
+    }
+
+    private static func add(_ counts: TokenCounts, key: String?, slot: Int, to perKey: inout PerKey) {
+        var row = perKey[key ?? ""] ?? Array(repeating: TokenCounts(), count: days)
+        row[slot] = row[slot] + counts
+        perKey[key ?? ""] = row
+    }
+
     // MARK: Anthropic
 
-    /// `GET /v1/organizations/usage_report/messages`, daily buckets.
-    static func parseAnthropicTokens(_ pages: [Data], start: Date) throws -> [TokenCounts] {
-        var perDay = Array(repeating: TokenCounts(), count: days)
+    /// `GET /v1/organizations/usage_report/messages?group_by[]=api_key_id`, daily buckets.
+    static func parseAnthropicTokens(_ pages: [Data], start: Date) throws -> PerKey {
+        var perKey: PerKey = [:]
         for bucket in try pages.flatMap(buckets) {
             guard let date = DateParsing.iso8601(bucket["starting_at"] as? String), let slot = slot(date, start: start) else { continue }
             for result in (bucket["results"] as? [[String: Any]]) ?? [] {
                 func int(_ value: Any?) -> Int { ClaudeUsageParser.number(value).map(Int.init) ?? 0 }
                 let creation = result["cache_creation"] as? [String: Any] ?? [:]
-                perDay[slot] = perDay[slot] + TokenCounts(
+                let counts = TokenCounts(
                     input: int(result["uncached_input_tokens"]),
                     output: int(result["output_tokens"]),
                     cacheRead: int(result["cache_read_input_tokens"]),
                     cacheWrite: int(creation["ephemeral_5m_input_tokens"]) + int(creation["ephemeral_1h_input_tokens"])
                 )
+                add(counts, key: result["api_key_id"] as? String, slot: slot, to: &perKey)
             }
         }
-        return perDay
+        return perKey
     }
 
     /// `GET /v1/organizations/cost_report`. `amount` is a decimal string in cents.
@@ -76,25 +120,38 @@ public enum AdminAPIUsage {
         return perDay
     }
 
+    /// `GET /v1/organizations/api_keys`: id → name.
+    static func parseAnthropicKeyNames(_ page: Data) -> (names: [String: String], nextCursor: String?) {
+        guard let json = try? JSONSerialization.jsonObject(with: page) as? [String: Any] else { return ([:], nil) }
+        var names: [String: String] = [:]
+        for key in (json["data"] as? [[String: Any]]) ?? [] {
+            if let id = key["id"] as? String { names[id] = (key["name"] as? String) ?? id }
+        }
+        let next = json["has_more"] as? Bool == true ? json["last_id"] as? String : nil
+        return (names, next)
+    }
+
     // MARK: OpenAI
 
-    /// `GET /v1/organization/usage/completions`. OpenAI counts cached tokens inside `input_tokens`.
-    static func parseOpenAITokens(_ pages: [Data], start: Date) throws -> [TokenCounts] {
-        var perDay = Array(repeating: TokenCounts(), count: days)
+    /// `GET /v1/organization/usage/completions?group_by=api_key_id`. OpenAI counts cached
+    /// tokens inside `input_tokens`.
+    static func parseOpenAITokens(_ pages: [Data], start: Date) throws -> PerKey {
+        var perKey: PerKey = [:]
         for bucket in try pages.flatMap(buckets) {
             guard let epoch = ClaudeUsageParser.number(bucket["start_time"]),
                   let slot = slot(Date(timeIntervalSince1970: epoch), start: start) else { continue }
             for result in (bucket["results"] as? [[String: Any]]) ?? [] {
                 func int(_ name: String) -> Int { ClaudeUsageParser.number(result[name]).map(Int.init) ?? 0 }
                 let cached = int("input_cached_tokens")
-                perDay[slot] = perDay[slot] + TokenCounts(
+                let counts = TokenCounts(
                     input: max(0, int("input_tokens") - cached),
                     output: int("output_tokens"),
                     cacheRead: cached
                 )
+                add(counts, key: result["api_key_id"] as? String, slot: slot, to: &perKey)
             }
         }
-        return perDay
+        return perKey
     }
 
     /// `GET /v1/organization/costs`. `amount.value` is in dollars.
@@ -110,6 +167,17 @@ public enum AdminAPIUsage {
         return perDay
     }
 
+    /// OpenAI list endpoints (`/organization/projects`, `/projects/{id}/api_keys`): ids, names, cursor.
+    static func parseOpenAIList(_ page: Data) -> (items: [(id: String, name: String)], nextCursor: String?) {
+        guard let json = try? JSONSerialization.jsonObject(with: page) as? [String: Any] else { return ([], nil) }
+        let items = ((json["data"] as? [[String: Any]]) ?? []).compactMap { item -> (String, String)? in
+            guard let id = item["id"] as? String else { return nil }
+            return (id, (item["name"] as? String) ?? id)
+        }
+        let next = json["has_more"] as? Bool == true ? json["last_id"] as? String : nil
+        return (items, next)
+    }
+
     private static func buckets(_ page: Data) throws -> [[String: Any]] {
         guard let json = try JSONSerialization.jsonObject(with: page) as? [String: Any],
               let data = json["data"] as? [[String: Any]]
@@ -122,6 +190,20 @@ public enum AdminAPIUsage {
               json["has_more"] as? Bool == true
         else { return nil }
         return json["next_page"] as? String
+    }
+}
+
+/// Key names change rarely and OpenAI needs a request per project to list them, so they're
+/// cached for an hour per admin key.
+actor APIKeyNameCache {
+    static let shared = APIKeyNameCache()
+    private var entries: [String: (names: [String: String], fetched: Date)] = [:]
+
+    func names(for account: String, load: () async -> [String: String]?) async -> [String: String] {
+        if let entry = entries[account], entry.fetched > Date().addingTimeInterval(-3_600) { return entry.names }
+        guard let names = await load() else { return entries[account]?.names ?? [:] }
+        entries[account] = (names, Date())
+        return names
     }
 }
 
@@ -143,9 +225,15 @@ extension UsageFetcher {
                 URLQueryItem(name: "limit", value: String(AdminAPIUsage.days)),
             ]
             let auth = [("x-api-key", key), ("anthropic-version", "2023-06-01")]
-            let tokens = try await adminPages("https://api.anthropic.com/v1/organizations/usage_report/messages", query, auth, provider)
+            let tokens = try await adminPages(
+                "https://api.anthropic.com/v1/organizations/usage_report/messages",
+                query + [URLQueryItem(name: "group_by[]", value: "api_key_id")], auth, provider
+            )
             let costs = try await adminPages("https://api.anthropic.com/v1/organizations/cost_report", query, auth, provider)
-            usage.tokens = AdminAPIUsage.totals(try AdminAPIUsage.parseAnthropicTokens(tokens, start: start))
+            let perKey = try AdminAPIUsage.parseAnthropicTokens(tokens, start: start)
+            let names = await APIKeyNameCache.shared.names(for: secretKey) { await anthropicKeyNames(auth) }
+            usage.tokens = AdminAPIUsage.totals(perKey)
+            usage.apiKeys = AdminAPIUsage.keys(perKey, names: names, unattributed: "Console & Workbench")
             usage.spend = SpendTotals(daily: try AdminAPIUsage.parseAnthropicSpend(costs, start: start))
 
         case .openai:
@@ -156,13 +244,72 @@ extension UsageFetcher {
                 URLQueryItem(name: "limit", value: String(AdminAPIUsage.days)),
             ]
             let auth = [("Authorization", "Bearer \(key)")]
-            let tokens = try await adminPages("https://api.openai.com/v1/organization/usage/completions", query, auth, provider)
+            let tokens = try await adminPages(
+                "https://api.openai.com/v1/organization/usage/completions",
+                query + [URLQueryItem(name: "group_by", value: "api_key_id")], auth, provider
+            )
             let costs = try await adminPages("https://api.openai.com/v1/organization/costs", query, auth, provider)
-            usage.tokens = AdminAPIUsage.totals(try AdminAPIUsage.parseOpenAITokens(tokens, start: start))
+            let perKey = try AdminAPIUsage.parseOpenAITokens(tokens, start: start)
+            let names = await APIKeyNameCache.shared.names(for: secretKey) { await openAIKeyNames(auth) }
+            usage.tokens = AdminAPIUsage.totals(perKey)
+            usage.apiKeys = AdminAPIUsage.keys(perKey, names: names, unattributed: "No key")
             usage.spend = SpendTotals(daily: try AdminAPIUsage.parseOpenAISpend(costs, start: start))
         }
         usage.plan = "API"
         return usage
+    }
+
+    /// Key names are a nicety: any failure here just leaves keys labelled by id.
+    private func anthropicKeyNames(_ auth: [(String, String)]) async -> [String: String]? {
+        var names: [String: String] = [:]
+        var cursor: String?
+        for _ in 0..<10 {
+            var query = [URLQueryItem(name: "limit", value: "1000")]
+            if let cursor { query.append(URLQueryItem(name: "after_id", value: cursor)) }
+            guard let page = try? await adminGet("https://api.anthropic.com/v1/organizations/api_keys", query, auth) else { return nil }
+            let parsed = AdminAPIUsage.parseAnthropicKeyNames(page)
+            names.merge(parsed.names) { $1 }
+            guard let next = parsed.nextCursor else { break }
+            cursor = next
+        }
+        return names
+    }
+
+    /// OpenAI only lists keys per project, so this walks every project.
+    private func openAIKeyNames(_ auth: [(String, String)]) async -> [String: String]? {
+        func list(_ url: String) async -> [(id: String, name: String)]? {
+            var items: [(id: String, name: String)] = []
+            var cursor: String?
+            for _ in 0..<10 {
+                var query = [URLQueryItem(name: "limit", value: "100")]
+                if let cursor { query.append(URLQueryItem(name: "after", value: cursor)) }
+                guard let page = try? await adminGet(url, query, auth) else { return nil }
+                let parsed = AdminAPIUsage.parseOpenAIList(page)
+                items += parsed.items
+                guard let next = parsed.nextCursor else { break }
+                cursor = next
+            }
+            return items
+        }
+        guard let projects = await list("https://api.openai.com/v1/organization/projects") else { return nil }
+        var names: [String: String] = [:]
+        for project in projects {
+            for key in await list("https://api.openai.com/v1/organization/projects/\(project.id)/api_keys") ?? [] {
+                names[key.id] = projects.count > 1 ? "\(key.name) · \(project.name)" : key.name
+            }
+        }
+        return names
+    }
+
+    private func adminGet(_ url: String, _ query: [URLQueryItem], _ headers: [(String, String)]) async throws -> Data {
+        var components = URLComponents(string: url)!
+        components.queryItems = query
+        var request = URLRequest(url: components.url!)
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await http.send(request)
+        guard (200..<300).contains(response.statusCode) else { throw UsageError.http(status: response.statusCode, body: nil) }
+        return data
     }
 
     private func adminPages(

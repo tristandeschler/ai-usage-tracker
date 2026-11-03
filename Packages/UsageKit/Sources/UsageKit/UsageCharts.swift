@@ -215,3 +215,61 @@ struct AppShareBar: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+/// Tokens per API key over the last 7 days, busiest first. Spend isn't broken out because
+/// neither provider reports it per key.
+struct APIKeyBreakdown: View {
+    let keys: [APIKeyUsage]
+    let provider: ProviderKind
+    @State private var showAll = false
+
+    private static let collapsedCount = 5
+
+    private var visible: [APIKeyUsage] {
+        showAll || keys.count <= Self.collapsedCount + 1 ? keys : Array(keys.prefix(Self.collapsedCount))
+    }
+
+    var body: some View {
+        let busiest = max(keys.first?.lastSevenDays ?? 1, 1)
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Tokens by API key · last 7 days")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            ForEach(visible) { key in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(key.name)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        Text(UsageFormat.tokens(key.lastSevenDays))
+                            .font(.caption.weight(.medium))
+                            .monospacedDigit()
+                    }
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(BrandPalette.muted(provider).opacity(0.35))
+                            Capsule()
+                                .fill(BrandPalette.accent(provider))
+                                .frame(width: max(4, proxy.size.width * Double(key.lastSevenDays) / Double(busiest)))
+                        }
+                    }
+                    .frame(height: 4)
+                }
+                .help("\(key.name): \(UsageFormat.tokens(key.today)) today, \(UsageFormat.tokens(key.lastSevenDays)) in the last 7 days")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(key.name), \(UsageFormat.tokens(key.lastSevenDays)) tokens in the last 7 days")
+            }
+
+            if keys.count > visible.count || showAll {
+                Button(showAll ? "Show fewer" : "Show \(keys.count - visible.count) more keys") {
+                    withAnimation(.snappy) { showAll.toggle() }
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            }
+        }
+    }
+}

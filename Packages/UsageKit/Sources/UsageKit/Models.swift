@@ -125,6 +125,7 @@ public struct ProviderUsage: Hashable, Sendable {
     /// API accounts: organization-wide tokens and spend for the last 7 days.
     public var tokens: TokenTotals?
     public var spend: SpendTotals?
+    public var apiKeys: [APIKeyUsage]?
     public var plan: String?
     public var identity: String?
     /// The provider says requests are currently blocked, even if no window shows 100%.
@@ -153,6 +154,8 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
     /// API accounts: organization-wide tokens and spend for the last 7 days.
     public var tokens: TokenTotals?
     public var spend: SpendTotals?
+    /// API accounts: tokens per API key, busiest first.
+    public var apiKeys: [APIKeyUsage]?
 
     public init(
         id: UUID,
@@ -190,6 +193,7 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
         appShares = usage.appShares.isEmpty ? nil : usage.appShares
         tokens = usage.tokens
         spend = usage.spend
+        apiKeys = usage.apiKeys
     }
 
     /// Highest utilization across all windows.
