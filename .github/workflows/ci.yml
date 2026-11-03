@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run UsageKit tests
+        run: swift test --package-path Packages/UsageKit
+      - name: Build the app (unsigned)
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -project TokenTracker.xcodeproj -scheme TokenTrackerMac -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO build -quiet

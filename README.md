@@ -15,7 +15,9 @@ A menu bar app for your Mac that shows how much of your Claude and ChatGPT plan 
 | Anthropic API | An Admin API key (`sk-ant-admin…`), kept in your Keychain | `/v1/organizations/usage_report/messages` and `/cost_report` |
 | OpenAI API | An Admin API key, kept in your Keychain | `/v1/organization/usage/completions` and `/costs` |
 
-For each subscription you get the 5-hour and weekly limits, any per-model weekly limits, your plan, and when each one resets. Claude accounts also show how the week's usage splits across Claude Code, chats and Cowork. API accounts show your organization's spend and tokens for today and the last 7 days (UTC days, as the providers report them). Regular API keys can't read usage, so these need an admin key. The menu bar shows the account you're using right now, colored green, amber or red. You can switch it to show whichever account is closest to its limit.
+For each subscription you get the 5-hour and weekly limits, any per-model weekly limits, your plan, and when each one resets. Claude accounts also show how the week's usage splits across Claude Code, chats and Cowork. API accounts show your organization's spend and tokens for today and the last 7 days (UTC days, as the providers report them), broken down by API key. Anthropic reports spend per key (it can lag by a few hours); OpenAI only reports tokens per key. Regular API keys can't read usage, so these need an admin key. The menu bar shows the account you're using right now, colored green, amber or red. You can switch it to show whichever account is closest to its limit.
+
+There are also small, medium and large widgets for the desktop and Notification Center. They show the account you're using and how close each one is to its limit, and get their numbers from the app (never your logins).
 
 By default you get a notification at 80%, 95% and 100% of each limit, and another when a maxed-out account resets. You can change these in Settings.
 
@@ -37,7 +39,10 @@ make test        # run the tests
 make live-test   # check against your real Claude Code and Codex logins
 make run         # build and open it from the build folder
 make install     # build a release copy into /Applications and open it
+make release     # Developer ID-signed, notarized zip in build/release
 ```
+
+`make release` needs a paid Apple Developer team signed in to Xcode; it notarizes through that account and prints the zip's SHA-256 for the release notes.
 
 `make project` rebuilds `TokenTracker.xcodeproj` from `project.yml`. The Xcode project isn't checked in.
 
@@ -46,6 +51,7 @@ make install     # build a release copy into /Applications and open it
 ```
 Packages/UsageKit   Fetching, parsing, alert logic and the shared SwiftUI views
 Apps/Mac            The menu bar app, settings and sign-in window
+Apps/Widget         Desktop and Notification Center widgets
 Apps/Shared         App icon and the Claude/OpenAI logos
 ```
 

@@ -1,7 +1,7 @@
 DERIVED := build
 APP := $(DERIVED)/Build/Products/Debug/Token Tracker.app
 
-.PHONY: project test live-test build run install clean
+.PHONY: project test live-test build run install release clean
 
 project:
 	xcodegen generate
@@ -31,6 +31,10 @@ install: project
 	ditto "$(DERIVED)/Build/Products/Release/Token Tracker.app" "/Applications/Token Tracker.app"
 	sleep 1
 	open "/Applications/Token Tracker.app"
+
+# Developer ID-signed, notarized zip in build/release (needs a paid team signed in to Xcode).
+release:
+	Scripts/release.sh
 
 clean:
 	rm -rf $(DERIVED) TokenTracker.xcodeproj
