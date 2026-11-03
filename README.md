@@ -60,7 +60,7 @@ Apps/Shared         App icon and the Claude/OpenAI logos
 
 ## Privacy
 
-Everything stays on your Mac. Logins live in your Keychain, or in Claude Code's and Codex's own files (read, never changed), and the app only talks to Anthropic and OpenAI. There's no server, no analytics and no tracking. When you sign in through the app, it keeps only the login cookie and Cloudflare's, not the rest of the site's cookies.
+Everything stays on your Mac. Logins live in your Keychain, or in Claude Code's and Codex's own files (read, never changed), and logins and keys only ever go to the provider they belong to. The app talks to Anthropic and OpenAI for usage, and to GitHub to check for and download updates. There's no server, no analytics and no tracking. When you sign in through the app, it keeps only the login cookie and Cloudflare's, not the rest of the site's cookies.
 
 Admin API keys can do more than read usage, so give Token Tracker its own key and revoke it if you stop using the app. See [SECURITY.md](SECURITY.md) to report a problem.
 
