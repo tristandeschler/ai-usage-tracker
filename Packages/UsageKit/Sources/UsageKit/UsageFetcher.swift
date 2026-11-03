@@ -1,8 +1,8 @@
 import Foundation
 
 public struct UsageFetcher: Sendable {
-    /// Safari's UA; web-session cookies are minted in a WKWebView using the same string, which
-    /// keeps Cloudflare's bot checks consistent between sign-in and polling.
+    /// Used for pasted web sessions. Sign-ins through the app store the web view's own UA instead
+    /// (see `userAgentKey`), since Cloudflare ties its clearance cookie to the UA that earned it.
     public static let browserUserAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
 
@@ -37,6 +37,13 @@ public struct UsageFetcher: Sendable {
         }
     }
 
+    /// Secret-store key holding the User-Agent that goes with a web session's cookies.
+    public static func userAgentKey(_ accountKey: String) -> String { accountKey + ".userAgent" }
+
+    private func userAgent(for secretKey: String) -> String {
+        ((try? secrets.read(Self.userAgentKey(secretKey))) ?? nil) ?? Self.browserUserAgent
+    }
+
     // MARK: Claude
 
     private func claudeCodeUsage() async throws -> ProviderUsage {
@@ -64,11 +71,12 @@ public struct UsageFetcher: Sendable {
     private func claudeWebUsage(secretKey: String) async throws -> ProviderUsage {
         let hint = "Sign in to claude.ai again from Settings → Accounts."
         guard var cookies = try secrets.read(secretKey), !cookies.isEmpty else { throw UsageError.notSignedIn(hint) }
+        let userAgent = userAgent(for: secretKey)
 
         func get(_ url: String) async throws -> Data {
             var request = URLRequest(url: URL(string: url)!)
             request.setValue(cookies, forHTTPHeaderField: "Cookie")
-            request.setValue(Self.browserUserAgent, forHTTPHeaderField: "User-Agent")
+            request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             let (data, response) = try await http.send(request)
             if let merged = CookieHeader.merging(cookies, response: response) {
@@ -111,20 +119,21 @@ public struct UsageFetcher: Sendable {
         }
 
         do {
-            return try await whamUsage(bearer: auth.accessToken, accountID: auth.accountID, cookies: nil, fallbackEmail: auth.email)
+            return try await whamUsage(bearer: auth.accessToken, accountID: auth.accountID, cookies: nil, userAgent: nil, fallbackEmail: auth.email)
         } catch UsageError.unauthorized {
             auth = try await auth.refreshed(writingTo: path, http: http)
-            return try await whamUsage(bearer: auth.accessToken, accountID: auth.accountID, cookies: nil, fallbackEmail: auth.email)
+            return try await whamUsage(bearer: auth.accessToken, accountID: auth.accountID, cookies: nil, userAgent: nil, fallbackEmail: auth.email)
         }
     }
 
     private func chatGPTWebUsage(secretKey: String) async throws -> ProviderUsage {
         let hint = "Sign in to chatgpt.com again from Settings → Accounts."
         guard let cookies = try secrets.read(secretKey), !cookies.isEmpty else { throw UsageError.notSignedIn(hint) }
+        let userAgent = userAgent(for: secretKey)
 
         var request = URLRequest(url: URL(string: "https://chatgpt.com/api/auth/session")!)
         request.setValue(cookies, forHTTPHeaderField: "Cookie")
-        request.setValue(Self.browserUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await http.send(request)
         var current = cookies
@@ -140,17 +149,19 @@ public struct UsageFetcher: Sendable {
         let email = (session["user"] as? [String: Any])?["email"] as? String
         let accountID = (session["account"] as? [String: Any])?["id"] as? String
 
-        return try await whamUsage(bearer: token, accountID: accountID, cookies: current, fallbackEmail: email)
+        return try await whamUsage(bearer: token, accountID: accountID, cookies: current, userAgent: userAgent, fallbackEmail: email)
     }
 
-    private func whamUsage(bearer: String, accountID: String?, cookies: String?, fallbackEmail: String?) async throws -> ProviderUsage {
+    private func whamUsage(
+        bearer: String, accountID: String?, cookies: String?, userAgent: String?, fallbackEmail: String?
+    ) async throws -> ProviderUsage {
         var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!)
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let accountID { request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id") }
         if let cookies {
             request.setValue(cookies, forHTTPHeaderField: "Cookie")
-            request.setValue(Self.browserUserAgent, forHTTPHeaderField: "User-Agent")
+            request.setValue(userAgent ?? Self.browserUserAgent, forHTTPHeaderField: "User-Agent")
         } else {
             request.setValue("codex-cli", forHTTPHeaderField: "User-Agent")
         }

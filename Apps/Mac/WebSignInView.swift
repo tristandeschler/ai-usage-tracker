@@ -32,6 +32,14 @@ struct WebSignInView: View {
             }
         }
 
+        /// The cookie that holds the login, for the paste-it-yourself fallback.
+        var sessionCookie: String {
+            switch self {
+            case .claude: "sessionKey"
+            case .chatGPT: "__Secure-next-auth.session-token"
+            }
+        }
+
         /// Runs in the page; resolves to a display name once the session is signed in, else null.
         var probeScript: String {
             switch self {
@@ -58,31 +66,139 @@ struct WebSignInView: View {
     let target: Target
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var browser = BrowserController()
     @State private var status = "Sign in with the account you want to track."
+    @State private var failed = false
+    @State private var link = ""
+    @State private var showPaste = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                ProviderBadge(target.source.provider)
-                Text(status).font(.callout)
-                Spacer()
-                Button("Cancel") { dismiss() }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    ProviderBadge(target.source.provider)
+                    Text(status)
+                        .font(.callout)
+                        .foregroundStyle(failed ? .red : .primary)
+                        .lineLimit(2)
+                    Spacer()
+                    Button("Paste Session Key…") { showPaste = true }
+                    Button("Cancel") { dismiss() }
+                }
+                HStack {
+                    TextField("Got a sign-in link by email? Paste it here instead of clicking it", text: $link)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(openLink)
+                    Button("Open", action: openLink)
+                        .disabled(URL(string: link.trimmingCharacters(in: .whitespaces))?.host() == nil)
+                }
+                Text("Email links open in your normal browser, which signs that browser in instead of this window. Copy the link and paste it above. Google sign-in may be blocked here, so use email if it is.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(10)
+            .padding(12)
             Divider()
-            SignInWebView(target: target) { name, cookies in
-                status = "Signed in as \(name). Adding account…"
-                model.addWebAccount(source: target.source, cookieHeader: cookies, suggestedName: name)
-                dismiss()
+            SignInWebView(target: target, controller: browser) { name, cookies, userAgent in
+                await finish(cookies: cookies, userAgent: userAgent, name: name)
             }
         }
-        .frame(minWidth: 460, minHeight: 600)
+        .frame(minWidth: 520, minHeight: 640)
+        .sheet(isPresented: $showPaste) {
+            PasteSessionSheet(target: target) { cookies in
+                await finish(cookies: cookies, userAgent: nil, name: nil)
+            }
+        }
+    }
+
+    private func openLink() {
+        guard let url = URL(string: link.trimmingCharacters(in: .whitespaces)), url.host() != nil else { return }
+        browser.webView?.load(URLRequest(url: url))
+        link = ""
+    }
+
+    /// Returns an error message when the session doesn't work, so the caller can stay open.
+    @discardableResult
+    private func finish(cookies: String, userAgent: String?, name: String?) async -> String? {
+        status = "Checking \(target.domain) usage…"
+        failed = false
+        if let error = await model.addWebAccount(
+            source: target.source, cookieHeader: cookies, userAgent: userAgent, suggestedName: name
+        ) {
+            status = "Couldn't read usage: \(error)"
+            failed = true
+            return error
+        }
+        dismiss()
+        return nil
+    }
+}
+
+@MainActor
+@Observable
+final class BrowserController {
+    weak var webView: WKWebView?
+}
+
+private struct PasteSessionSheet: View {
+    let target: WebSignInView.Target
+    let onSubmit: (String) async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var value = ""
+    @State private var error: String?
+    @State private var checking = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Paste a \(target.domain) session").font(.headline)
+            Text("""
+            1. Open \(target.domain) in your browser, signed in to the account to add.
+            2. Open Developer Tools (⌥⌘I) → Application (Chrome) or Storage (Safari) → Cookies → https://\(target.domain).
+            3. Copy the value of **\(target.sessionCookie)** and paste it below. You can also paste a whole Cookie header.
+            """)
+            .font(.callout)
+            .fixedSize(horizontal: false, vertical: true)
+
+            TextField(target.sessionCookie, text: $value, axis: .vertical)
+                .lineLimit(3...6)
+                .textFieldStyle(.roundedBorder)
+                .font(.body.monospaced())
+
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button(checking ? "Checking…" : "Add Account") {
+                    Task {
+                        checking = true
+                        error = await onSubmit(cookieHeader)
+                        checking = false
+                        if error == nil { dismiss() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || checking)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+    }
+
+    /// A bare value becomes `name=value`; anything with `=` is taken as a Cookie header already.
+    private var cookieHeader: String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"^[Cc]ookie:\s*"#, with: "", options: .regularExpression)
+        return trimmed.contains("=") ? trimmed : "\(target.sessionCookie)=\(trimmed)"
     }
 }
 
 private struct SignInWebView: NSViewRepresentable {
     let target: WebSignInView.Target
-    let onSignedIn: @MainActor (String, String) -> Void
+    let controller: BrowserController
+    let onSignedIn: @MainActor (_ name: String, _ cookies: String, _ userAgent: String?) async -> String?
 
     func makeCoordinator() -> Coordinator { Coordinator(target: target, onSignedIn: onSignedIn) }
 
@@ -90,10 +206,14 @@ private struct SignInWebView: NSViewRepresentable {
         let configuration = WKWebViewConfiguration()
         // A fresh, non-persistent store per sign-in keeps accounts from sharing cookies.
         configuration.websiteDataStore = .nonPersistent()
+        // Keep WebKit's real UA but add Safari's suffix, as Safari itself does. Google refuses to sign
+        // in from web views without it, and a fully spoofed UA can fail Cloudflare's bot check.
+        configuration.applicationNameForUserAgent = "Version/26.0 Safari/605.1.15"
         let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.customUserAgent = UsageFetcher.browserUserAgent
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.load(URLRequest(url: target.loginURL))
+        controller.webView = webView
         context.coordinator.start(webView)
         return webView
     }
@@ -105,14 +225,15 @@ private struct SignInWebView: NSViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let target: WebSignInView.Target
-        let onSignedIn: @MainActor (String, String) -> Void
+        let onSignedIn: @MainActor (String, String, String?) async -> String?
         private weak var webView: WKWebView?
         private var timer: Timer?
-        private var finished = false
+        private var busy = false
+        private var done = false
 
-        init(target: WebSignInView.Target, onSignedIn: @escaping @MainActor (String, String) -> Void) {
+        init(target: WebSignInView.Target, onSignedIn: @escaping @MainActor (String, String, String?) async -> String?) {
             self.target = target
             self.onSignedIn = onSignedIn
         }
@@ -127,28 +248,71 @@ private struct SignInWebView: NSViewRepresentable {
         func stop() {
             timer?.invalidate()
             timer = nil
+            popups.forEach { $0.close() }
+            popups.removeAll()
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             Task { await probe() }
         }
 
+        private var popups: [NSWindow] = []
+
+        /// "Continue with Google/Apple" opens a pop-up that reports back to the page through
+        /// `window.opener`, so it needs a real child web view in its own window.
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            let popup = WKWebView(frame: NSRect(x: 0, y: 0, width: 480, height: 640), configuration: configuration)
+            popup.uiDelegate = self
+            let window = NSWindow(
+                contentRect: popup.frame,
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Sign In"
+            window.contentView = popup
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+            popups.append(window)
+            return popup
+        }
+
+        /// The provider closes its pop-up (`window.close()`) once sign-in finishes.
+        func webViewDidClose(_ webView: WKWebView) {
+            guard let window = popups.first(where: { $0.contentView === webView }) else { return }
+            window.close()
+            popups.removeAll { $0 === window }
+        }
+
         private func probe() async {
-            guard !finished, let webView,
+            guard !done, !busy, let webView,
                   let host = webView.url?.host(), host == target.domain || host.hasSuffix(".\(target.domain)")
             else { return }
+            busy = true
+            defer { busy = false }
 
             guard let result = try? await webView.callAsyncJavaScript(target.probeScript, contentWorld: .page),
-                  let name = result as? String, !finished
+                  let name = result as? String
             else { return }
 
             let cookies = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
                 .filter { $0.domain == target.domain || $0.domain.hasSuffix(".\(target.domain)") }
             guard !cookies.isEmpty else { return }
+            let userAgent = try? await webView.evaluateJavaScript("navigator.userAgent") as? String
 
-            finished = true
+            done = true
             stop()
-            onSignedIn(name, CookieHeader.make(from: cookies))
+            if await onSignedIn(name, CookieHeader.make(from: cookies), userAgent) != nil {
+                // The session didn't work from outside the browser. Try again after the next page
+                // load (not on a timer, to avoid hammering the provider), or the user can paste instead.
+                done = false
+            }
         }
     }
 }

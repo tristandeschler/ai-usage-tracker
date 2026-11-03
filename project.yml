@@ -25,6 +25,8 @@ targets:
       - Apps/Mac
       - path: Apps/Shared/AppIcon.icon
         buildPhase: resources
+      - path: Apps/Shared/Brand.xcassets
+        buildPhase: resources
     dependencies:
       - package: UsageKit
     info:
@@ -49,6 +51,8 @@ targets:
     sources:
       - Apps/iOS
       - path: Apps/Shared/AppIcon.icon
+        buildPhase: resources
+      - path: Apps/Shared/Brand.xcassets
         buildPhase: resources
     dependencies:
       - package: UsageKit

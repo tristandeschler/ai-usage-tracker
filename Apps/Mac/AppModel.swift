@@ -230,7 +230,10 @@ final class AppModel {
         snapshots[account.id] = nil
         lastActivity[account.id] = nil
         alertState.forget(accountID: account.id)
-        if account.source.usesStoredSecret { try? secrets.delete(account.id.uuidString) }
+        if account.source.usesStoredSecret {
+            try? secrets.delete(account.id.uuidString)
+            try? secrets.delete(UsageFetcher.userAgentKey(account.id.uuidString))
+        }
         pendingCloudDeletes.append(account.id)
         saveAccounts()
         persist(alertState, key: Keys.alertState)
@@ -242,16 +245,23 @@ final class AppModel {
         saveAccounts()
     }
 
-    /// Stores cookies from a web sign-in and adds the account, named after the identity it reports.
-    func addWebAccount(source: CredentialSource, cookieHeader: String, suggestedName: String?) {
-        let account = AccountConfig(name: suggestedName ?? source.provider.displayName, source: source)
+    /// Checks a web session against the provider, then stores it and adds the account, named after
+    /// the identity the provider reports. Returns an error message instead when the session doesn't work.
+    func addWebAccount(source: CredentialSource, cookieHeader: String, userAgent: String?, suggestedName: String?) async -> String? {
+        var account = AccountConfig(name: suggestedName ?? source.provider.displayName, source: source)
+        let key = account.id.uuidString
         do {
-            try secrets.write(cookieHeader, for: account.id.uuidString)
+            try secrets.write(cookieHeader, for: key)
+            if let userAgent { try secrets.write(userAgent, for: UsageFetcher.userAgentKey(key)) }
+            let usage = try await fetcher.usage(for: account)
+            if suggestedName == nil, let identity = usage.identity { account.name = identity }
         } catch {
-            NSLog("Could not save credentials: \(error)")
-            return
+            try? secrets.delete(key)
+            try? secrets.delete(UsageFetcher.userAgentKey(key))
+            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         add(account)
+        return nil
     }
 
     var hasClaudeCodeAccount: Bool { accounts.contains { $0.source == .claudeCode } }

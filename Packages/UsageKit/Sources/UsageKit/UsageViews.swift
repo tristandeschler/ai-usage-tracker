@@ -43,6 +43,9 @@ public enum UsageStyle {
     public static let cardCornerRadius: CGFloat = 20
 }
 
+/// The provider's logo: Claude's spark in its orange, OpenAI's knot in the text color.
+///
+/// The logo images live in the app's asset catalog (`Apps/Shared/Brand.xcassets`).
 public struct ProviderBadge: View {
     let provider: ProviderKind
     let size: CGFloat
@@ -53,11 +56,12 @@ public struct ProviderBadge: View {
     }
 
     public var body: some View {
-        Text(provider == .anthropic ? "A" : "O")
-            .font(.system(size: size * 0.5, weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
+        Image(provider == .anthropic ? "ClaudeLogo" : "OpenAILogo", bundle: .main)
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundStyle(provider == .anthropic ? AnyShapeStyle(UsageStyle.providerColor(.anthropic)) : AnyShapeStyle(.primary))
             .frame(width: size, height: size)
-            .background(UsageStyle.providerColor(provider).gradient, in: Circle())
             .accessibilityLabel(provider.displayName)
     }
 }
