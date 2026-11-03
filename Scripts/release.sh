@@ -21,7 +21,7 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist Scripts/Ex
 
 echo "Waiting for Apple to notarize (usually a few minutes)…"
 for attempt in $(seq 1 60); do
-    if xcodebuild -exportNotarizedApp -archivePath "$ARCHIVE" -exportPath "$BUILD/notarized" -quiet 2>/dev/null; then
+    if xcodebuild -exportNotarizedApp -archivePath "$ARCHIVE" -exportPath "$BUILD/notarized" -quiet >/dev/null 2>&1; then
         break
     fi
     [ "$attempt" = 60 ] && { echo "Notarization didn't finish in 30 minutes." >&2; exit 1; }
