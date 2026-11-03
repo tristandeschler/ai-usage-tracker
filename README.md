@@ -45,7 +45,7 @@ make release     # Developer ID-signed, notarized zip in build/release
 PUBLISH=1 make release   # …and publish it as a GitHub release
 ```
 
-`make release` needs a paid Apple Developer team signed in to Xcode; it notarizes through that account and prints the zip's SHA-256 for the release notes.
+Releases normally happen on their own: every merge to `main` that changes the app is built, notarized and published by GitHub Actions. See [RELEASING.md](RELEASING.md). `make release` does the same from your Mac, through the Apple account Xcode is signed in to.
 
 `make project` rebuilds `TokenTracker.xcodeproj` from `project.yml`. The Xcode project isn't checked in.
 
