@@ -29,7 +29,8 @@ Requires macOS 26 / iOS 26 (Liquid Glass), Xcode 26+, and [XcodeGen](https://git
 ```sh
 make test        # UsageKit unit tests
 make live-test   # hit the real endpoints with this Mac's Claude Code + Codex logins
-make run         # build and launch the menu bar app
+make run         # build and launch from the build folder (development)
+make install     # Release build into /Applications and launch it
 ```
 
 `make project` regenerates `TokenTracker.xcodeproj` from `project.yml` (the project file is not committed).
