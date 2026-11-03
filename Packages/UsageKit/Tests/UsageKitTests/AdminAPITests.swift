@@ -53,6 +53,27 @@ import Testing
         #expect(try AdminAPIUsage.parseOpenAISpend([Data(costs.utf8)], start: start)[6] == 0.42)
     }
 
+    @Test func anthropicSpendPerKey() throws {
+        let page = #"""
+        {"data":[
+          {"cost":{"amount":"41280.000000","currency":"USD","list_amount":"51600.000000","requests":128},"starting_at":"2026-11-02T00:00:00Z","ending_at":"2026-11-03T00:00:00Z","group":{"api_key_id":"apikey_prod"}},
+          {"cost":{"amount":"720.500000","currency":"USD"},"starting_at":"2026-11-03T00:00:00Z","ending_at":"2026-11-04T00:00:00Z","group":{"api_key_id":"apikey_prod"}},
+          {"cost":{"amount":"100.000000","currency":"USD"},"starting_at":"2026-11-03T00:00:00Z","ending_at":"2026-11-04T00:00:00Z","group":{"api_key_id":null}},
+          {"cost":{"amount":"999.000000","currency":"USD"},"starting_at":"2026-10-01T00:00:00Z","ending_at":"2026-10-02T00:00:00Z","group":{"api_key_id":"apikey_old"}}
+        ],"data_refreshed_at":"2026-11-03T10:00:00Z","has_more":false,"next_page":null}
+        """#
+        let spend = try AdminAPIUsage.parseAnthropicKeySpend([Data(page.utf8)], start: start)
+        #expect(spend == ["apikey_prod": 420.005, "": 1.0])
+
+        let keys = AdminAPIUsage.keys(
+            ["apikey_prod": Array(repeating: TokenCounts(output: 10), count: 7)],
+            spend: spend, names: ["apikey_prod": "Production"], unattributed: "Console & Workbench"
+        )
+        #expect(keys.map(\.name) == ["Production", "Console & Workbench"])
+        #expect(keys[1].lastSevenDays == 0)
+        #expect(keys[1].spendLastSevenDays == 1.0)
+    }
+
     @Test func keyNameLists() {
         let anthropic = AdminAPIUsage.parseAnthropicKeyNames(Data(#"{"data":[{"type":"api_key","id":"apikey_1","name":"Prod"}],"has_more":true,"last_id":"apikey_1"}"#.utf8))
         #expect(anthropic.names == ["apikey_1": "Prod"])

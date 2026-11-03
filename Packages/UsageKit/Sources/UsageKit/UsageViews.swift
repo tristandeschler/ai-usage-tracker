@@ -215,10 +215,6 @@ public struct AccountCard: View {
                 Divider().opacity(0.5)
                 APIKeyBreakdown(keys: keys, provider: snapshot.provider)
             }
-            if let shares = snapshot.appShares, !shares.isEmpty {
-                Divider().opacity(0.5)
-                AppShareBar(shares: shares)
-            }
         }
     }
 

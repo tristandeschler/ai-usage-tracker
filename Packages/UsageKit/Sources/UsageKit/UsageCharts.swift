@@ -29,8 +29,8 @@ private extension UIColor {
 }
 #endif
 
-/// Brand colors for charts. Anthropic's clay, sky and fig, and OpenAI's green, each stepped
-/// for light and dark and checked for colorblind separation.
+/// Brand colors for charts: Anthropic's clay and cloud gray, OpenAI's green and gray, each
+/// stepped for light and dark.
 enum BrandPalette {
     static func accent(_ provider: ProviderKind) -> Color {
         switch provider {
@@ -39,20 +39,25 @@ enum BrandPalette {
         }
     }
 
-    /// Recessive bars and "Other": Anthropic's cloud gray, or OpenAI's neutral gray.
-    static func muted(_ provider: ProviderKind) -> Color {
-        switch provider {
-        case .anthropic: .adaptive(light: 0xBFBFBA, dark: 0x666663)
-        case .openai: .adaptive(light: 0xC5C5D2, dark: 0x565869)
+    /// Swift Charts doesn't resolve dynamic colors, so charts pick the value for the current scheme.
+    static func chartColor(accent: Bool, _ provider: ProviderKind, _ scheme: ColorScheme) -> Color {
+        let dark = scheme == .dark
+        let hex: UInt32 = switch (provider, accent) {
+        case (.anthropic, true): dark ? 0xCF6A48 : 0xD97757
+        case (.openai, true): dark ? 0x19B98F : 0x10A37F
+        case (.anthropic, false): dark ? 0x7A7A76 : 0x91918D
+        case (.openai, false): dark ? 0x6E6E80 : 0x8E8EA0
         }
+        return Color(red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
     }
 
-    /// Claude apps in a fixed order, so a color always means the same app.
-    static let claudeApps: [String: Color] = [
-        "Claude Code": .adaptive(light: 0xD97757, dark: 0xCF6A48), // clay
-        "Chats": .adaptive(light: 0x4A86C5, dark: 0x5A93D0),       // sky
-        "Cowork": .adaptive(light: 0xC25A85, dark: 0xC9628D),      // fig
-    ]
+    /// Recessive bars and tracks: Anthropic's cloud gray, or OpenAI's neutral gray.
+    static func muted(_ provider: ProviderKind) -> Color {
+        switch provider {
+        case .anthropic: .adaptive(light: 0x91918D, dark: 0x7A7A76)
+        case .openai: .adaptive(light: 0x8E8EA0, dark: 0x6E6E80)
+        }
+    }
 }
 
 enum UsageFormat {
@@ -84,6 +89,7 @@ struct APIUsageSection: View {
     let provider: ProviderKind
     let now: Date
     @State private var hoveredDay: Int?
+    @Environment(\.colorScheme) private var colorScheme
 
     private struct Day: Identifiable {
         let id: Int
@@ -146,7 +152,7 @@ struct APIUsageSection: View {
                 width: .ratio(0.7)
             )
             .cornerRadius(2)
-            .foregroundStyle(day.id == days.count - 1 ? BrandPalette.accent(provider) : BrandPalette.muted(provider))
+            .foregroundStyle(BrandPalette.chartColor(accent: day.id == days.count - 1, provider, colorScheme))
             .opacity(hoveredDay == nil || hoveredDay == day.id ? 1 : 0.5)
         }
         .chartXAxis(.hidden)
@@ -173,51 +179,8 @@ struct APIUsageSection: View {
     }
 }
 
-/// How an account's weekly usage splits across Claude apps, as a thin stacked bar plus a legend.
-struct AppShareBar: View {
-    let shares: [AppShare]
-
-    private func color(for share: AppShare) -> Color {
-        BrandPalette.claudeApps[share.name] ?? BrandPalette.muted(.anthropic)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("This week by app")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            GeometryReader { proxy in
-                let total = max(shares.map(\.percent).reduce(0, +), 1)
-                let gaps = CGFloat(max(shares.count - 1, 0)) * 2
-                HStack(spacing: 2) {
-                    ForEach(shares, id: \.name) { share in
-                        Capsule()
-                            .fill(color(for: share))
-                            .frame(width: max(2, (proxy.size.width - gaps) * share.percent / total))
-                            .help("\(share.name): \(Int(share.percent.rounded()))% of this week's usage")
-                    }
-                }
-            }
-            .frame(height: 6)
-
-            HStack(spacing: 10) {
-                ForEach(shares, id: \.name) { share in
-                    HStack(spacing: 4) {
-                        Circle().fill(color(for: share)).frame(width: 6, height: 6)
-                        Text("\(share.name) \(Int(share.percent.rounded()))%")
-                    }
-                }
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// Tokens per API key over the last 7 days, busiest first. Spend isn't broken out because
-/// neither provider reports it per key.
+/// Usage per API key over the last 7 days, biggest first: spend where the provider reports it
+/// per key (Anthropic), tokens otherwise.
 struct APIKeyBreakdown: View {
     let keys: [APIKeyUsage]
     let provider: ProviderKind
@@ -230,9 +193,11 @@ struct APIKeyBreakdown: View {
     }
 
     var body: some View {
-        let busiest = max(keys.first?.lastSevenDays ?? 1, 1)
+        let bySpend = keys.contains { $0.spendLastSevenDays != nil }
+        let value: (APIKeyUsage) -> Double = { bySpend ? $0.spendLastSevenDays ?? 0 : Double($0.lastSevenDays) }
+        let busiest = max(keys.map(value).max() ?? 1, .leastNonzeroMagnitude)
         VStack(alignment: .leading, spacing: 7) {
-            Text("Tokens by API key · last 7 days")
+            Text(bySpend ? "By API key · last 7 days" : "Tokens by API key · last 7 days")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
 
@@ -244,21 +209,31 @@ struct APIKeyBreakdown: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer(minLength: 8)
-                        Text(UsageFormat.tokens(key.lastSevenDays))
-                            .font(.caption.weight(.medium))
-                            .monospacedDigit()
+                        if let spend = key.spendLastSevenDays {
+                            Text(UsageFormat.tokens(key.lastSevenDays))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                            Text(UsageFormat.dollars(spend))
+                                .font(.caption.weight(.medium))
+                                .monospacedDigit()
+                        } else {
+                            Text(UsageFormat.tokens(key.lastSevenDays))
+                                .font(.caption.weight(.medium))
+                                .monospacedDigit()
+                        }
                     }
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {
                             Capsule().fill(BrandPalette.muted(provider).opacity(0.35))
                             Capsule()
                                 .fill(BrandPalette.accent(provider))
-                                .frame(width: max(4, proxy.size.width * Double(key.lastSevenDays) / Double(busiest)))
+                                .frame(width: max(4, proxy.size.width * value(key) / busiest))
                         }
                     }
                     .frame(height: 4)
                 }
-                .help("\(key.name): \(UsageFormat.tokens(key.today)) today, \(UsageFormat.tokens(key.lastSevenDays)) in the last 7 days")
+                .help("\(key.name): \(UsageFormat.tokens(key.today)) tokens today, \(UsageFormat.tokens(key.lastSevenDays)) in the last 7 days" + (key.spendLastSevenDays.map { ", \(UsageFormat.dollars($0)) spent (can lag up to a day)" } ?? ""))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(key.name), \(UsageFormat.tokens(key.lastSevenDays)) tokens in the last 7 days")
             }
