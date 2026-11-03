@@ -214,7 +214,7 @@ private struct GeneralSettings: View {
                 }
             }
             Picker("Menu bar shows", selection: $model.settings.menuBarMode) {
-                Text("The account I'm using").tag(MenuBarMode.activeAccount)
+                Text("Account in use (usage going up)").tag(MenuBarMode.activeAccount)
                 Text("Whichever account is closest to its limit").tag(MenuBarMode.highestUsage)
                 Text("Icon only").tag(MenuBarMode.iconOnly)
             }
