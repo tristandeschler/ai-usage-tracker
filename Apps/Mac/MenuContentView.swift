@@ -16,7 +16,12 @@ struct MenuContentView: View {
                         GlassEffectContainer(spacing: 10) {
                             VStack(spacing: 10) {
                                 ForEach(model.orderedSnapshots) { snapshot in
-                                    AccountGlassCard(snapshot: snapshot, now: context.date)
+                                    AccountGlassCard(
+                                        snapshot: snapshot,
+                                        now: context.date,
+                                        isActive: model.settings.menuBarMode == .activeAccount
+                                            && snapshot.id == model.activeAccountID
+                                    )
                                 }
                             }
                         }

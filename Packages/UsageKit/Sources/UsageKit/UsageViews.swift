@@ -128,10 +128,13 @@ public struct WindowRow: View {
 public struct AccountCard: View {
     let snapshot: AccountSnapshot
     let now: Date
+    let isActive: Bool
 
-    public init(snapshot: AccountSnapshot, now: Date = Date()) {
+    /// - Parameter isActive: Marks the account currently in use (its usage is going up).
+    public init(snapshot: AccountSnapshot, now: Date = Date(), isActive: Bool = false) {
         self.snapshot = snapshot
         self.now = now
+        self.isActive = isActive
     }
 
     public var body: some View {
@@ -139,9 +142,20 @@ public struct AccountCard: View {
             HStack(spacing: 10) {
                 ProviderBadge(snapshot.provider)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(snapshot.accountName)
-                        .font(.headline)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(snapshot.accountName)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if isActive {
+                            Label("In use", systemImage: "arrow.up.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.green)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.green.opacity(0.15), in: Capsule())
+                                .help("Usage is going up; shown in the menu bar")
+                        }
+                    }
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -193,14 +207,16 @@ public struct AccountCard: View {
 public struct AccountGlassCard: View {
     let snapshot: AccountSnapshot
     let now: Date
+    let isActive: Bool
 
-    public init(snapshot: AccountSnapshot, now: Date = Date()) {
+    public init(snapshot: AccountSnapshot, now: Date = Date(), isActive: Bool = false) {
         self.snapshot = snapshot
         self.now = now
+        self.isActive = isActive
     }
 
     public var body: some View {
-        AccountCard(snapshot: snapshot, now: now)
+        AccountCard(snapshot: snapshot, now: now, isActive: isActive)
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassEffect(

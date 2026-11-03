@@ -34,10 +34,11 @@ struct MenuBarLabel: View {
     let model: AppModel
 
     var body: some View {
-        let percent = model.peakPercent
+        let snapshot = model.menuBarSnapshot
+        let percent = snapshot?.peakPercent
         HStack(spacing: 3) {
-            Image(systemName: Self.symbol(for: percent, limited: model.limitedCount > 0))
-            if model.settings.showPercentInMenuBar, let percent {
+            Image(systemName: Self.symbol(for: percent, limited: snapshot?.isLimited == true))
+            if let percent {
                 Text("\(Int(percent.rounded()))%")
                     .monospacedDigit()
             }

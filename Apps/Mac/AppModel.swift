@@ -4,12 +4,32 @@ import Security
 import ServiceManagement
 import UsageKit
 
+enum MenuBarMode: String, Codable, CaseIterable {
+    /// The account whose usage went up most recently.
+    case activeAccount
+    case highestUsage
+    case iconOnly
+}
+
 struct AppSettings: Codable, Equatable {
     var refreshMinutes: Double = 5
     var thresholds: [Double] = AlertEvaluator.defaultThresholds
     var notifyOnReset = true
-    var showPercentInMenuBar = true
+    var menuBarMode = MenuBarMode.activeAccount
     var iCloudSync = false
+
+    init() {}
+
+    // Tolerate settings saved by older builds: missing keys keep their defaults.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = AppSettings()
+        refreshMinutes = try c.decodeIfPresent(Double.self, forKey: .refreshMinutes) ?? d.refreshMinutes
+        thresholds = try c.decodeIfPresent([Double].self, forKey: .thresholds) ?? d.thresholds
+        notifyOnReset = try c.decodeIfPresent(Bool.self, forKey: .notifyOnReset) ?? d.notifyOnReset
+        menuBarMode = (try? c.decodeIfPresent(MenuBarMode.self, forKey: .menuBarMode)) ?? d.menuBarMode
+        iCloudSync = try c.decodeIfPresent(Bool.self, forKey: .iCloudSync) ?? d.iCloudSync
+    }
 }
 
 @MainActor
@@ -20,6 +40,8 @@ final class AppModel {
     private(set) var isRefreshing = false
     private(set) var lastRefresh: Date?
     private(set) var syncError: String?
+    /// When each account's usage last went up.
+    private(set) var lastActivity: [UUID: Date] = [:]
 
     var settings = AppSettings() {
         didSet {
@@ -54,6 +76,7 @@ final class AppModel {
         static let snapshots = "snapshots"
         static let settings = "settings"
         static let alertState = "alertState"
+        static let lastActivity = "lastActivity"
     }
 
     init() {
@@ -61,6 +84,7 @@ final class AppModel {
         accounts = load(Keys.accounts) ?? []
         settings = load(Keys.settings) ?? AppSettings()
         alertState = load(Keys.alertState) ?? AlertState()
+        lastActivity = load(Keys.lastActivity) ?? [:]
         let cached: [AccountSnapshot] = load(Keys.snapshots) ?? []
         snapshots = Dictionary(uniqueKeysWithValues: cached.map { ($0.id, $0) })
 
@@ -77,9 +101,27 @@ final class AppModel {
         }
     }
 
-    /// Highest usage across all accounts, shown in the menu bar.
-    var peakPercent: Double? {
-        orderedSnapshots.compactMap(\.peakPercent).max()
+    /// The enabled account whose usage went up most recently.
+    var activeAccountID: UUID? {
+        accounts.filter(\.isEnabled).compactMap { account in lastActivity[account.id].map { (account.id, $0) } }
+            .max { $0.1 < $1.1 }?.0
+    }
+
+    private var highestUsageSnapshot: AccountSnapshot? {
+        orderedSnapshots.filter { $0.peakPercent != nil }.max { ($0.peakPercent ?? 0) < ($1.peakPercent ?? 0) }
+    }
+
+    /// The account whose percentage the menu bar shows.
+    var menuBarSnapshot: AccountSnapshot? {
+        switch settings.menuBarMode {
+        case .activeAccount:
+            // Until some account's usage has gone up, fall back to the highest.
+            activeAccountID.flatMap { snapshots[$0] } ?? highestUsageSnapshot
+        case .highestUsage:
+            highestUsageSnapshot
+        case .iconOnly:
+            nil
+        }
     }
 
     var limitedCount: Int { orderedSnapshots.filter(\.isLimited).count }
@@ -114,7 +156,9 @@ final class AppModel {
         }
 
         var alerts: [UsageAlert] = []
+        let now = Date()
         for fresh in results {
+            if fresh.isRising(from: snapshots[fresh.id]) { lastActivity[fresh.id] = now }
             var snapshot = fresh
             // Keep the last good numbers visible when a refresh fails, with the error on top.
             if snapshot.error != nil, let previous = snapshots[snapshot.id], !previous.windows.isEmpty {
@@ -133,6 +177,7 @@ final class AppModel {
         lastRefresh = Date()
         persist(Array(snapshots.values), key: Keys.snapshots)
         persist(alertState, key: Keys.alertState)
+        persist(lastActivity, key: Keys.lastActivity)
 
         for alert in alerts { notifier.post(alert) }
         await syncAll(alerts: alerts)
@@ -183,6 +228,7 @@ final class AppModel {
     func remove(_ account: AccountConfig) {
         accounts.removeAll { $0.id == account.id }
         snapshots[account.id] = nil
+        lastActivity[account.id] = nil
         alertState.forget(accountID: account.id)
         if account.source.usesStoredSecret { try? secrets.delete(account.id.uuidString) }
         pendingCloudDeletes.append(account.id)

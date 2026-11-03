@@ -158,6 +158,18 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
 
     public var isLimited: Bool { limitReached || windows.contains(where: \.isExhausted) }
 
+    /// Whether any window's usage grew since `previous`, meaning the account is being used right now.
+    /// A window that newly appears with usage (Claude's session window after a reset) counts too.
+    public func isRising(from previous: AccountSnapshot?) -> Bool {
+        guard let previous, error == nil else { return false }
+        let before = Dictionary(previous.windows.map { ($0.id, $0.usedPercent) }, uniquingKeysWith: max)
+        return windows.contains { window in
+            guard let old = before[window.id] else { return window.usedPercent > 0 }
+            // A drop means the window reset; only growth within the same window counts.
+            return window.usedPercent > old
+        }
+    }
+
     /// When the last exhausted window resets, i.e. when this account becomes usable again.
     public var unblockedAt: Date? {
         windows.filter(\.isExhausted).compactMap(\.resetsAt).max()

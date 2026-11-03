@@ -207,7 +207,11 @@ private struct GeneralSettings: View {
                     Text(minutes == 1 ? "minute" : "\(Int(minutes)) minutes").tag(minutes)
                 }
             }
-            Toggle("Show highest usage % in the menu bar", isOn: $model.settings.showPercentInMenuBar)
+            Picker("Menu bar shows", selection: $model.settings.menuBarMode) {
+                Text("Account in use (usage going up)").tag(MenuBarMode.activeAccount)
+                Text("Highest usage across accounts").tag(MenuBarMode.highestUsage)
+                Text("Icon only").tag(MenuBarMode.iconOnly)
+            }
             Toggle("Launch at login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { model.launchAtLogin = launchAtLogin }
 
