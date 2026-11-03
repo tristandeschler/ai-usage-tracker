@@ -1,10 +1,7 @@
 import Foundation
 
-/// A Codex CLI `auth.json` (`$CODEX_HOME/auth.json`, default `~/.codex/auth.json`).
+/// A Codex CLI `auth.json` (`$CODEX_HOME/auth.json`, default `~/.codex/auth.json`), read-only.
 public struct CodexAuthFile: Sendable, Equatable {
-    public static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
-    public static let tokenURL = URL(string: "https://auth.openai.com/oauth/token")!
-
     public var accessToken: String
     public var refreshToken: String?
     public var idToken: String?
@@ -46,50 +43,5 @@ public struct CodexAuthFile: Sendable, Equatable {
     public var isExpired: Bool {
         guard let expiry = JWT.expiry(accessToken) else { return false }
         return expiry < Date().addingTimeInterval(60)
-    }
-
-    /// Refreshes the tokens and writes them back to `path`, preserving any other keys,
-    /// the same way the Codex CLI does.
-    public func refreshed(writingTo path: String, http: any HTTPClient) async throws -> CodexAuthFile {
-        guard let refreshToken else { throw UsageError.expired("Run `codex login` again.") }
-
-        var request = URLRequest(url: Self.tokenURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "client_id": Self.clientID,
-            "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "scope": "openid profile email",
-        ])
-        let (data, response) = try await http.send(request)
-        guard response.statusCode == 200,
-              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let access = json["access_token"] as? String
-        else {
-            throw UsageError.expired("Codex refresh failed (HTTP \(response.statusCode)). Run `codex login` again.")
-        }
-
-        var updated = self
-        updated.accessToken = access
-        updated.refreshToken = (json["refresh_token"] as? String) ?? refreshToken
-        updated.idToken = (json["id_token"] as? String) ?? idToken
-        try updated.write(to: path)
-        return updated
-    }
-
-    func write(to path: String) throws {
-        var root = (FileManager.default.contents(atPath: path))
-            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-        var tokens = (root["tokens"] as? [String: Any]) ?? [:]
-        tokens["access_token"] = accessToken
-        tokens["refresh_token"] = refreshToken
-        tokens["id_token"] = idToken
-        if let accountID { tokens["account_id"] = accountID }
-        root["tokens"] = tokens
-        root["last_refresh"] = ISO8601DateFormatter().string(from: Date())
-        let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: URL(fileURLWithPath: path), options: .atomic)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
     }
 }

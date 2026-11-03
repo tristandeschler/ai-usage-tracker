@@ -32,6 +32,17 @@ struct WebSignInView: View {
             }
         }
 
+        /// Cookies worth keeping: the login itself plus Cloudflare's, which some requests need.
+        /// Analytics and preference cookies are dropped.
+        func isEssential(_ cookie: HTTPCookie) -> Bool {
+            let cloudflare = ["cf_clearance", "__cf_bm", "_cfuvid", "__cflb"]
+            if cloudflare.contains(cookie.name) { return true }
+            switch self {
+            case .claude: return ["sessionKey", "routingHint", "lastActiveOrg"].contains(cookie.name)
+            case .chatGPT: return cookie.name.hasPrefix("__Secure-next-auth.session-token")
+            }
+        }
+
         /// The cookie that holds the login, for the paste-it-yourself fallback.
         var sessionCookie: String {
             switch self {
@@ -400,6 +411,9 @@ private struct SignInWebView: NSViewRepresentable {
 
             done = true
             stop()
+            // Store only the cookies the login needs; fall back to all of them if that isn't enough.
+            let essential = cookies.filter(target.isEssential)
+            if !essential.isEmpty, await onSignedIn(name, CookieHeader.make(from: essential), userAgent) == nil { return }
             if await onSignedIn(name, CookieHeader.make(from: cookies), userAgent) != nil {
                 // The session didn't work from outside the browser. Try again after the next page
                 // load (not on a timer, to avoid hammering the provider), or the user can paste instead.

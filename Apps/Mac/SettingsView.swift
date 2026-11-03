@@ -280,8 +280,8 @@ private struct GeneralSettings: View {
         @Bindable var model = model
         Form {
             Picker("Refresh every", selection: $model.settings.refreshMinutes) {
-                ForEach([1.0, 2, 5, 10, 15, 30], id: \.self) { minutes in
-                    Text(minutes == 1 ? "minute" : "\(Int(minutes)) minutes").tag(minutes)
+                ForEach([5.0, 10, 15, 30], id: \.self) { minutes in
+                    Text("\(Int(minutes)) minutes").tag(minutes)
                 }
             }
             Picker("Menu bar shows", selection: $model.settings.menuBarMode) {

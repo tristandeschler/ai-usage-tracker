@@ -22,7 +22,7 @@ struct AppSettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = AppSettings()
-        refreshMinutes = try c.decodeIfPresent(Double.self, forKey: .refreshMinutes) ?? d.refreshMinutes
+        refreshMinutes = max(5, try c.decodeIfPresent(Double.self, forKey: .refreshMinutes) ?? d.refreshMinutes)
         thresholds = try c.decodeIfPresent([Double].self, forKey: .thresholds) ?? d.thresholds
         notifyOnReset = try c.decodeIfPresent(Bool.self, forKey: .notifyOnReset) ?? d.notifyOnReset
         menuBarMode = (try? c.decodeIfPresent(MenuBarMode.self, forKey: .menuBarMode)) ?? d.menuBarMode
@@ -123,7 +123,9 @@ final class AppModel {
 
     func startPolling() {
         pollTask?.cancel()
-        let interval = max(1, settings.refreshMinutes) * 60
+        // Five minutes is the floor: these endpoints are shared with the official apps, and
+        // hammering them risks getting accounts flagged.
+        let interval = max(5, settings.refreshMinutes) * 60
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()

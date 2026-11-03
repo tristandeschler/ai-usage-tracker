@@ -1,6 +1,10 @@
 import Foundation
 
 public struct UsageFetcher: Sendable {
+    /// How the app identifies itself to the token-based endpoints. It never claims to be
+    /// Claude Code or the Codex CLI.
+    public static let appUserAgent = "TokenTracker/0.1 (+https://github.com/tristandeschler/token-tracker)"
+
     /// Used for pasted web sessions. Sign-ins through the app store the web view's own UA instead
     /// (see `userAgentKey`), since Cloudflare ties its clearance cookie to the UA that earned it.
     public static let browserUserAgent =
@@ -59,7 +63,7 @@ public struct UsageFetcher: Sendable {
         request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("claude-cli/2.1.0 (external, cli)", forHTTPHeaderField: "User-Agent")
+        request.setValue(Self.appUserAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await http.send(request)
         try check(response, data: data, reauthHint: "Run `claude` and sign in again.")
@@ -122,17 +126,16 @@ public struct UsageFetcher: Sendable {
 
     // MARK: OpenAI
 
+    /// Reads the Codex login read-only. Codex refreshes its own token, so an expired one just
+    /// means running `codex` once.
     private func codexCLIUsage(path: String) async throws -> ProviderUsage {
-        var auth = try CodexAuthFile.load(path: path)
-        if auth.isExpired {
-            auth = try await auth.refreshed(writingTo: path, http: http)
-        }
-
+        let auth = try CodexAuthFile.load(path: path)
+        let hint = "Run `codex` once to refresh its login."
+        if auth.isExpired { throw UsageError.expired(hint) }
         do {
             return try await whamUsage(bearer: auth.accessToken, accountID: auth.accountID, cookies: nil, userAgent: nil, fallbackEmail: auth.email)
         } catch UsageError.unauthorized {
-            auth = try await auth.refreshed(writingTo: path, http: http)
-            return try await whamUsage(bearer: auth.accessToken, accountID: auth.accountID, cookies: nil, userAgent: nil, fallbackEmail: auth.email)
+            throw UsageError.expired(hint)
         }
     }
 
@@ -173,7 +176,7 @@ public struct UsageFetcher: Sendable {
             request.setValue(cookies, forHTTPHeaderField: "Cookie")
             request.setValue(userAgent ?? Self.browserUserAgent, forHTTPHeaderField: "User-Agent")
         } else {
-            request.setValue("codex-cli", forHTTPHeaderField: "User-Agent")
+            request.setValue(Self.appUserAgent, forHTTPHeaderField: "User-Agent")
         }
 
         let (data, response) = try await http.send(request)

@@ -1,0 +1,8 @@
+// Copy to Config/Local.xcconfig and fill in. Find your team ID in Xcode → Settings → Accounts,
+// or in the OU field of your "Apple Development" certificate.
+DEVELOPMENT_TEAM = ABCDE12345
+TT_BUNDLE_PREFIX = com.yourname
+
+// Recommended once Xcode is signed in to your Apple account: stores logins and keys in the data
+// protection keychain (only this app, only this Mac). Without it they go in the login keychain.
+// TT_ENTITLEMENTS = Apps/Mac/TokenTracker.entitlements

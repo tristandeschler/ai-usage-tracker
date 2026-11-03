@@ -1,12 +1,13 @@
 name: TokenTracker
 options:
-  bundleIdPrefix: com.tristandeschler
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
 settings:
   base:
-    DEVELOPMENT_TEAM: L2Q787SW8C
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.1.0"
@@ -37,7 +38,9 @@ targets:
         NSHumanReadableCopyright: ""
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tristandeschler.TokenTracker
+        PRODUCT_BUNDLE_IDENTIFIER: $(TT_BUNDLE_PREFIX).TokenTracker
+        # Set TT_ENTITLEMENTS in Config/Local.xcconfig to keep secrets in the data protection keychain.
+        CODE_SIGN_ENTITLEMENTS: $(TT_ENTITLEMENTS)
         PRODUCT_NAME: Token Tracker
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: YES
