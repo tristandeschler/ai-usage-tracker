@@ -1,0 +1,9 @@
+// Shared build settings. Put your own team and bundle ID prefix in Config/Local.xcconfig
+// (copy Local.xcconfig.example); that file isn't checked in.
+
+TT_BUNDLE_PREFIX = com.example
+DEVELOPMENT_TEAM =
+// Off by default: it needs a provisioning profile, so Xcode must be signed in to your Apple account.
+TT_ENTITLEMENTS =
+
+#include? "Local.xcconfig"

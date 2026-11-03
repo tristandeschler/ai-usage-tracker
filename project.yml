@@ -1,0 +1,53 @@
+name: TokenTracker
+options:
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+settings:
+  base:
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+packages:
+  UsageKit:
+    path: Packages/UsageKit
+targets:
+  TokenTrackerMac:
+    type: application
+    platform: macOS
+    sources:
+      - Apps/Mac
+      - path: Apps/Shared/AppIcon.icon
+        buildPhase: resources
+      - path: Apps/Shared/Brand.xcassets
+        buildPhase: resources
+    dependencies:
+      - package: UsageKit
+    info:
+      path: Apps/Mac/Info.plist
+      properties:
+        CFBundleDisplayName: Token Tracker
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHumanReadableCopyright: ""
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(TT_BUNDLE_PREFIX).TokenTracker
+        # Set TT_ENTITLEMENTS in Config/Local.xcconfig to keep secrets in the data protection keychain.
+        CODE_SIGN_ENTITLEMENTS: $(TT_ENTITLEMENTS)
+        PRODUCT_NAME: Token Tracker
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  TokenTrackerMac:
+    build:
+      targets:
+        TokenTrackerMac: all
+    run:
+      config: Debug
