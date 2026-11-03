@@ -3,7 +3,7 @@ import Foundation
 public struct UsageFetcher: Sendable {
     /// How the app identifies itself to the token-based endpoints. It never claims to be
     /// Claude Code or the Codex CLI.
-    public static let appUserAgent = "TokenTracker/0.1 (+https://github.com/tristandeschler/ai-usage-tracker)"
+    public static let appUserAgent = "TokenTracker/0.2 (+https://github.com/tristandeschler/ai-usage-tracker)"
 
     /// Used for pasted web sessions. Sign-ins through the app store the web view's own UA instead
     /// (see `userAgentKey`), since Cloudflare ties its clearance cookie to the UA that earned it.

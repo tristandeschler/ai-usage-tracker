@@ -36,3 +36,11 @@ ZIP="$BUILD/TokenTracker-$VERSION.zip"
 ditto -c -k --keepParent "$APP" "$ZIP"
 shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
 echo "Done: $ZIP"
+
+# PUBLISH=1 make release: create the GitHub release the in-app updater looks for.
+if [ "${PUBLISH:-0}" = 1 ]; then
+    REPO=$(xcodebuild -project TokenTracker.xcodeproj -scheme TokenTrackerMac -showBuildSettings 2>/dev/null | awk '/ TT_UPDATE_REPOSITORY =/ { print $3; exit }')
+    gh release create "v${VERSION}" "$ZIP" "$ZIP.sha256" --repo "$REPO" --target main \
+        --title "Token Tracker ${VERSION}" --notes "SHA-256 of $(basename "$ZIP"): $(cut -d' ' -f1 "$ZIP.sha256")"
+    echo "Published v${VERSION} to ${REPO}"
+fi

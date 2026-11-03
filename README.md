@@ -17,6 +17,8 @@ A menu bar app for your Mac that shows how much of your Claude and ChatGPT plan 
 
 For each subscription you get the 5-hour and weekly limits, any per-model weekly limits, your plan, and when each one resets. Claude accounts also show how the week's usage splits across Claude Code, chats and Cowork. API accounts show your organization's spend and tokens for today and the last 7 days (UTC days, as the providers report them), broken down by API key. Anthropic reports spend per key (it can lag by a few hours); OpenAI only reports tokens per key. Regular API keys can't read usage, so these need an admin key. The menu bar shows the account you're using right now, colored green, amber or red. You can switch it to show whichever account is closest to its limit.
 
+Token Tracker checks GitHub for a new release once a day and shows an **Update** button in the menu (or installs it for you, if you turn that on in Settings). Before installing, it checks the download is signed with the same Developer ID and notarized by Apple, and refuses anything else.
+
 There are also small, medium and large widgets for the desktop and Notification Center. They show the account you're using and how close each one is to its limit, and get their numbers from the app (never your logins).
 
 By default you get a notification at 80%, 95% and 100% of each limit, and another when a maxed-out account resets. You can change these in Settings.
@@ -40,6 +42,7 @@ make live-test   # check against your real Claude Code and Codex logins
 make run         # build and open it from the build folder
 make install     # build a release copy into /Applications and open it
 make release     # Developer ID-signed, notarized zip in build/release
+PUBLISH=1 make release   # …and publish it as a GitHub release
 ```
 
 `make release` needs a paid Apple Developer team signed in to Xcode; it notarizes through that account and prints the zip's SHA-256 for the release notes.

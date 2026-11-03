@@ -28,5 +28,7 @@
 	<string></string>
 	<key>TTAppGroup</key>
 	<string>$(TT_APP_GROUP)</string>
+	<key>TTUpdateRepository</key>
+	<string>$(TT_UPDATE_REPOSITORY)</string>
 </dict>
 </plist>

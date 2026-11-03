@@ -234,6 +234,43 @@ private struct AdminKeySheet: View {
     }
 }
 
+private struct UpdateStatusRow: View {
+    let updater: Updater
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status)
+                if case let .failed(message) = updater.state {
+                    Text(message).font(.caption).foregroundStyle(.red)
+                }
+            }
+            Spacer()
+            if let release = updater.available {
+                Link("What's new", destination: release.pageURL)
+                Button("Update to \(release.version)") { Task { await updater.install() } }
+                    .buttonStyle(.glassProminent)
+                    .disabled(updater.state == .downloading || updater.state == .installing)
+            } else {
+                Button("Check Now") { Task { await updater.check() } }
+                    .disabled(!updater.isSupported || updater.state == .checking)
+            }
+        }
+    }
+
+    private var status: String {
+        guard updater.isSupported else { return "Updates need a signed build (this is version \(updater.currentVersion))." }
+        switch updater.state {
+        case .checking: return "Checking…"
+        case .downloading: return "Downloading the update…"
+        case .installing: return "Installing. Token Tracker will reopen."
+        default:
+            if let release = updater.available { return "Version \(release.version) is available (you have \(updater.currentVersion))." }
+            return "You're on the latest version (\(updater.currentVersion))."
+        }
+    }
+}
+
 // MARK: Alerts
 
 private struct AlertsSettings: View {
@@ -291,6 +328,13 @@ private struct GeneralSettings: View {
             }
             Toggle("Launch at login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { model.launchAtLogin = launchAtLogin }
+
+            Section("Updates") {
+                Toggle("Check for updates every day", isOn: $model.settings.checkForUpdates)
+                Toggle("Install updates automatically", isOn: $model.settings.installUpdatesAutomatically)
+                    .disabled(!model.settings.checkForUpdates)
+                UpdateStatusRow(updater: model.updater)
+            }
 
         }
         .formStyle(.grouped)
