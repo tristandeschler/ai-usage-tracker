@@ -3,7 +3,6 @@ options:
   bundleIdPrefix: com.tristandeschler
   deploymentTarget:
     macOS: "26.0"
-    iOS: "26.0"
   createIntermediateGroups: true
 settings:
   base:
@@ -38,53 +37,14 @@ targets:
         NSHumanReadableCopyright: ""
     settings:
       base:
-        # iCloud needs a paid Apple Developer team; build with TT_ICLOUD=YES to enable sync.
-        TT_ICLOUD: "NO"
-        CODE_SIGN_ENTITLEMENTS: Apps/Mac/Entitlements/iCloud-$(TT_ICLOUD).entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.tristandeschler.TokenTracker
         PRODUCT_NAME: Token Tracker
         ENABLE_HARDENED_RUNTIME: YES
-        GENERATE_INFOPLIST_FILE: YES
-  TokenTrackerIOS:
-    type: application
-    platform: iOS
-    sources:
-      - Apps/iOS
-      - path: Apps/Shared/AppIcon.icon
-        buildPhase: resources
-      - path: Apps/Shared/Brand.xcassets
-        buildPhase: resources
-    dependencies:
-      - package: UsageKit
-    info:
-      path: Apps/iOS/Info.plist
-      properties:
-        CFBundleDisplayName: Token Tracker
-        UILaunchScreen: {}
-        UIBackgroundModes: [remote-notification]
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-    entitlements:
-      path: Apps/iOS/TokenTrackerIOS.entitlements
-      properties:
-        aps-environment: development
-        com.apple.developer.icloud-container-identifiers: [iCloud.com.tristandeschler.TokenTracker]
-        com.apple.developer.icloud-services: [CloudKit]
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tristandeschler.TokenTracker.ios
-        PRODUCT_NAME: Token Tracker
-        TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
 schemes:
   TokenTrackerMac:
     build:
       targets:
         TokenTrackerMac: all
-    run:
-      config: Debug
-  TokenTrackerIOS:
-    build:
-      targets:
-        TokenTrackerIOS: all
     run:
       config: Debug

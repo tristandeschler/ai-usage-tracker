@@ -221,24 +221,6 @@ private struct GeneralSettings: View {
             Toggle("Launch at login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { model.launchAtLogin = launchAtLogin }
 
-            Section {
-                Toggle("Sync to iPhone via iCloud", isOn: $model.settings.iCloudSync)
-                    .disabled(!AppModel.iCloudAvailable)
-                if !AppModel.iCloudAvailable {
-                    Text("This build doesn't include iCloud. Build with `make run ICLOUD=YES` using a paid Apple Developer team.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if let error = model.syncError {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-            } footer: {
-                Text("Only usage numbers are synced to your private iCloud database. Logins and cookies stay on this Mac.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
         .onAppear { launchAtLogin = model.launchAtLogin }

@@ -1,6 +1,6 @@
 # Token Tracker
 
-A macOS menu bar app (plus an iOS companion) that tracks Claude and ChatGPT/Codex plan usage across multiple accounts and notifies you as you approach or hit a limit.
+A macOS menu bar app that tracks Claude and ChatGPT/Codex plan usage across multiple accounts and notifies you as you approach or hit a limit.
 
 ## What it tracks
 
@@ -24,7 +24,7 @@ These are undocumented endpoints that the official apps use, so they can change 
 
 ## Build
 
-Requires macOS 26 / iOS 26 (Liquid Glass), Xcode 26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+Requires macOS 26 (Liquid Glass), Xcode 26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
 make test        # UsageKit unit tests
@@ -35,23 +35,12 @@ make install     # Release build into /Applications and launch it
 
 `make project` regenerates `TokenTracker.xcodeproj` from `project.yml` (the project file is not committed).
 
-## iPhone companion
-
-The Mac app publishes usage snapshots (never credentials) to your private iCloud database. The iOS app shows them and receives push alerts through CloudKit subscriptions.
-
-iCloud and push need a **paid Apple Developer Program team**; personal teams can't sign them. Once you have one:
-
-```sh
-make run ICLOUD=YES   # Mac app with CloudKit
-make ios              # iOS app
-```
-
-Then enable Settings → General → "Sync to iPhone via iCloud" on the Mac.
-
 ## Layout
 
 ```
-Packages/UsageKit   Shared models, provider clients, parsers, alert logic, CloudKit sync, SwiftUI cards
+Packages/UsageKit   Shared models, provider clients, parsers, alert logic, SwiftUI cards
 Apps/Mac            Menu bar app (MenuBarExtra), settings, web sign-in
-Apps/iOS            Companion dashboard + CloudKit push alerts
+Apps/Shared         App icon and provider logos
 ```
+
+Everything runs locally: logins stay in your Keychain or the CLIs' own files, and the app only talks to the providers. An iOS companion (synced over iCloud) is planned; an earlier draft lives in git history.

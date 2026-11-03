@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import Security
 import ServiceManagement
 import UsageKit
 
@@ -16,7 +15,6 @@ struct AppSettings: Codable, Equatable {
     var thresholds: [Double] = AlertEvaluator.defaultThresholds
     var notifyOnReset = true
     var menuBarMode = MenuBarMode.activeAccount
-    var iCloudSync = false
 
     init() {}
 
@@ -28,7 +26,6 @@ struct AppSettings: Codable, Equatable {
         thresholds = try c.decodeIfPresent([Double].self, forKey: .thresholds) ?? d.thresholds
         notifyOnReset = try c.decodeIfPresent(Bool.self, forKey: .notifyOnReset) ?? d.notifyOnReset
         menuBarMode = (try? c.decodeIfPresent(MenuBarMode.self, forKey: .menuBarMode)) ?? d.menuBarMode
-        iCloudSync = try c.decodeIfPresent(Bool.self, forKey: .iCloudSync) ?? d.iCloudSync
     }
 }
 
@@ -39,7 +36,6 @@ final class AppModel {
     private(set) var snapshots: [UUID: AccountSnapshot] = [:]
     private(set) var isRefreshing = false
     private(set) var lastRefresh: Date?
-    private(set) var syncError: String?
     /// When each account's usage last went up.
     private(set) var lastActivity: [UUID: Date] = [:]
 
@@ -48,7 +44,6 @@ final class AppModel {
             guard settings != oldValue else { return }
             persist(settings, key: Keys.settings)
             if settings.refreshMinutes != oldValue.refreshMinutes { startPolling() }
-            if settings.iCloudSync, !oldValue.iCloudSync { Task { await syncAll() } }
         }
     }
 
@@ -68,8 +63,6 @@ final class AppModel {
     private let notifier = Notifier()
     private var alertState = AlertState()
     private var pollTask: Task<Void, Never>?
-    private var cloud: CloudSync?
-    private var pendingCloudDeletes: [UUID] = []
 
     private enum Keys {
         static let accounts = "accounts"
@@ -180,31 +173,6 @@ final class AppModel {
         persist(lastActivity, key: Keys.lastActivity)
 
         for alert in alerts { notifier.post(alert) }
-        await syncAll(alerts: alerts)
-    }
-
-    /// CloudKit raises an exception without the iCloud entitlement, which only paid developer
-    /// teams can sign, so sync stays off unless this build has it.
-    static let iCloudAvailable: Bool = {
-        guard let task = SecTaskCreateFromSelf(nil) else { return false }
-        return SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-services" as CFString, nil) != nil
-    }()
-
-    private func syncAll(alerts: [UsageAlert] = []) async {
-        guard settings.iCloudSync, Self.iCloudAvailable else { return }
-        if cloud == nil {
-            cloud = CloudSync()
-            Task { try? await cloud?.pruneAlerts() }
-        }
-        guard let cloud else { return }
-        do {
-            try await cloud.publish(orderedSnapshots, removing: pendingCloudDeletes)
-            pendingCloudDeletes = []
-            for alert in alerts { try await cloud.publish(alert) }
-            syncError = nil
-        } catch {
-            syncError = error.localizedDescription
-        }
     }
 
     // MARK: Accounts
@@ -234,10 +202,8 @@ final class AppModel {
             try? secrets.delete(account.id.uuidString)
             try? secrets.delete(UsageFetcher.userAgentKey(account.id.uuidString))
         }
-        pendingCloudDeletes.append(account.id)
         saveAccounts()
         persist(alertState, key: Keys.alertState)
-        Task { await syncAll() }
     }
 
     func move(from offsets: IndexSet, to destination: Int) {

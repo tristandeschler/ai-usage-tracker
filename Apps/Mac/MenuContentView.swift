@@ -102,12 +102,6 @@ struct MenuContentView: View {
                 }
                 .keyboardShortcut(",")
 
-                if let syncError = model.syncError {
-                    Image(systemName: "icloud.slash")
-                        .foregroundStyle(.orange)
-                        .help("iCloud sync failed: \(syncError)")
-                }
-
                 Spacer()
 
                 Button {
