@@ -15,7 +15,7 @@ live-test:
 
 build: project
 	xcodebuild -project TokenTracker.xcodeproj -scheme TokenTrackerMac -configuration Debug \
-		-derivedDataPath $(DERIVED) -allowProvisioningUpdates build -quiet
+		-derivedDataPath $(DERIVED) -allowProvisioningUpdates -allowProvisioningDeviceRegistration build -quiet
 
 run: build
 	-pkill -x "Token Tracker"
@@ -25,7 +25,7 @@ run: build
 # Release build copied to /Applications, so it survives rebuilds and shows up in Spotlight.
 install: project
 	xcodebuild -project TokenTracker.xcodeproj -scheme TokenTrackerMac -configuration Release \
-		-derivedDataPath $(DERIVED) -allowProvisioningUpdates build -quiet
+		-derivedDataPath $(DERIVED) -allowProvisioningUpdates -allowProvisioningDeviceRegistration build -quiet
 	-pkill -x "Token Tracker"
 	rm -rf "/Applications/Token Tracker.app"
 	ditto "$(DERIVED)/Build/Products/Release/Token Tracker.app" "/Applications/Token Tracker.app"
