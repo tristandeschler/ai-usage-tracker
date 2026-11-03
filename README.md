@@ -15,7 +15,7 @@ A menu bar app for your Mac that shows how much of your Claude and ChatGPT plan 
 | Anthropic API | An Admin API key (`sk-ant-admin…`), kept in your Keychain | `/v1/organizations/usage_report/messages` and `/cost_report` |
 | OpenAI API | An Admin API key, kept in your Keychain | `/v1/organization/usage/completions` and `/costs` |
 
-For each subscription you get the 5-hour and weekly limits, any per-model weekly limits, your plan, and when each one resets. Claude accounts also show how the week's usage splits across Claude Code, chats and Cowork. API accounts show your organization's spend and tokens for today and the last 7 days (UTC days, as the providers report them), broken down by API key. Anthropic reports spend per key (it can lag by a few hours); OpenAI only reports tokens per key. Regular API keys can't read usage, so these need an admin key. The menu bar shows the account you're using right now, colored green, amber or red. You can switch it to show whichever account is closest to its limit.
+For each subscription you get the 5-hour and weekly limits, any per-model weekly limits, your plan, and when each one resets. API accounts show your organization's spend and tokens for today and the last 7 days (UTC days, as the providers report them), broken down by API key. Anthropic reports spend per key (it can lag by a few hours); OpenAI only reports tokens per key. Regular API keys can't read usage, so these need an admin key. The menu bar shows the account you're using right now, colored green, amber or red. You can switch it to show whichever account is closest to its limit.
 
 Token Tracker checks GitHub for a new release once a day and shows an **Update** button in the menu (or installs it for you, if you turn that on in Settings). Before installing, it checks the download is signed with the same Developer ID and notarized by Apple, and refuses anything else.
 
@@ -60,7 +60,7 @@ Apps/Shared         App icon and the Claude/OpenAI logos
 
 ## Privacy
 
-Everything stays on your Mac. Logins live in your Keychain, or in Claude Code's and Codex's own files (read, never changed), and the app only talks to Anthropic and OpenAI. There's no server, no analytics and no tracking. When you sign in through the app, it keeps only the login cookie and Cloudflare's, not the rest of the site's cookies.
+Everything stays on your Mac. Logins live in your Keychain, or in Claude Code's and Codex's own files (read, never changed), and logins and keys only ever go to the provider they belong to. The app talks to Anthropic and OpenAI for usage, and to GitHub to check for and download updates. There's no server, no analytics and no tracking. When you sign in through the app, it keeps only the login cookie and Cloudflare's, not the rest of the site's cookies.
 
 Admin API keys can do more than read usage, so give Token Tracker its own key and revoke it if you stop using the app. See [SECURITY.md](SECURITY.md) to report a problem.
 

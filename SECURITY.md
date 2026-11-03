@@ -11,6 +11,7 @@ Use GitHub's private vulnerability reporting: the **Security** tab → **Report 
 - Logins, cookies and keys are stored in the macOS Keychain, never in files or settings.
 - They're only sent over HTTPS to the provider they belong to: `api.anthropic.com`, `claude.ai`, `chatgpt.com` or `api.openai.com`.
 - Claude Code's and Codex's own logins are read, never changed.
+- The only other place the app connects to is GitHub, to check for and download updates, and that sends no credentials.
 - The app has no server, no analytics and no third-party dependencies.
 
 ## For contributors
