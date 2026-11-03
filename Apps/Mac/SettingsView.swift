@@ -23,6 +23,7 @@ private struct AccountsSettings: View {
     @Environment(\.openWindow) private var openWindow
     @State private var selection: UUID?
     @State private var renaming: AccountConfig?
+    @State private var addingAdminKey: CredentialSource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -67,6 +68,10 @@ private struct AccountsSettings: View {
                         Button("Codex CLI…") { chooseCodexHome() }
                         Button("Sign in to chatgpt.com…") { signIn(.chatGPT) }
                     }
+                    Section("API usage") {
+                        Button("Anthropic Admin API key…") { addingAdminKey = .anthropicAdmin }
+                        Button("OpenAI Admin API key…") { addingAdminKey = .openAIAdmin }
+                    }
                 } label: {
                     Label("Add Account", systemImage: "plus")
                 }
@@ -88,6 +93,9 @@ private struct AccountsSettings: View {
             .padding(10)
         }
         .renameAccountAlert($renaming)
+        .sheet(item: $addingAdminKey) { source in
+            AdminKeySheet(source: source)
+        }
     }
 
     private func signIn(_ target: WebSignInView.Target) {
@@ -160,6 +168,69 @@ private struct AccountRow: View {
         default:
             account.source.displayName
         }
+    }
+}
+
+extension CredentialSource: @retroactive Identifiable {
+    public var id: String { displayName }
+}
+
+/// Adds an API usage account from an admin key, checking it first.
+private struct AdminKeySheet: View {
+    let source: CredentialSource
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var key = ""
+    @State private var error: String?
+    @State private var checking = false
+
+    private var isAnthropic: Bool { source.provider == .anthropic }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ProviderBadge(source.provider)
+                Text(isAnthropic ? "Add an Anthropic Admin API key" : "Add an OpenAI Admin API key").font(.headline)
+            }
+            Text(isAnthropic
+                 ? "Shows your organization's API spend and tokens for the last 7 days. Regular API keys can't read usage, so you need an admin key (it starts with sk-ant-admin)."
+                 : "Shows your organization's API spend and tokens for the last 7 days. Regular project keys can't read usage, so you need an admin key.")
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Link(isAnthropic ? "Create one in the Anthropic Console" : "Create one in the OpenAI dashboard",
+                 destination: URL(string: isAnthropic
+                    ? "https://console.anthropic.com/settings/admin-keys"
+                    : "https://platform.openai.com/settings/organization/admin-keys")!)
+                .font(.callout)
+
+            SecureField(isAnthropic ? "sk-ant-admin…" : "Admin key", text: $key)
+                .textFieldStyle(.roundedBorder)
+                .font(.body.monospaced())
+
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+            }
+            Text("The key stays in your Keychain and is only sent to \(isAnthropic ? "api.anthropic.com" : "api.openai.com").")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button(checking ? "Checking…" : "Add") {
+                    Task {
+                        checking = true
+                        error = await model.addAdminAccount(source: source, key: key.trimmingCharacters(in: .whitespacesAndNewlines))
+                        checking = false
+                        if error == nil { dismiss() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || checking)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
     }
 }
 

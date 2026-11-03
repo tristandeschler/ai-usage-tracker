@@ -23,11 +23,15 @@ public enum CredentialSource: Codable, Hashable, Sendable {
     case codexCLI(authFilePath: String)
     /// chatgpt.com browser cookies, stored in our own Keychain under the account id.
     case chatGPTWeb
+    /// An Anthropic Admin API key (stored in our Keychain) for organization-wide API usage and spend.
+    case anthropicAdmin
+    /// An OpenAI Admin API key (stored in our Keychain) for organization-wide API usage and spend.
+    case openAIAdmin
 
     public var provider: ProviderKind {
         switch self {
-        case .claudeCode, .claudeWeb: .anthropic
-        case .codexCLI, .chatGPTWeb: .openai
+        case .claudeCode, .claudeWeb, .anthropicAdmin: .anthropic
+        case .codexCLI, .chatGPTWeb, .openAIAdmin: .openai
         }
     }
 
@@ -37,13 +41,23 @@ public enum CredentialSource: Codable, Hashable, Sendable {
         case .claudeWeb: "claude.ai session"
         case .codexCLI: "Codex CLI login"
         case .chatGPTWeb: "chatgpt.com session"
+        case .anthropicAdmin: "Anthropic Admin API key"
+        case .openAIAdmin: "OpenAI Admin API key"
         }
     }
 
     /// Whether the secret lives in TokenTracker's own Keychain (vs. a file or another app's item).
+    /// API usage accounts report spend and tokens instead of plan limits.
+    public var isAPI: Bool {
+        switch self {
+        case .anthropicAdmin, .openAIAdmin: true
+        default: false
+        }
+    }
+
     public var usesStoredSecret: Bool {
         switch self {
-        case .claudeWeb, .chatGPTWeb: true
+        case .claudeWeb, .chatGPTWeb, .anthropicAdmin, .openAIAdmin: true
         case .claudeCode, .codexCLI: false
         }
     }
@@ -108,6 +122,9 @@ public struct ProviderUsage: Hashable, Sendable {
     public var windows: [UsageWindow]
     /// How this week's usage splits across apps. Only Claude reports this.
     public var appShares: [AppShare] = []
+    /// API accounts: organization-wide tokens and spend for the last 7 days.
+    public var tokens: TokenTotals?
+    public var spend: SpendTotals?
     public var plan: String?
     public var identity: String?
     /// The provider says requests are currently blocked, even if no window shows 100%.
@@ -133,8 +150,9 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
     public var error: String?
     /// How this week's usage splits across apps (Claude only).
     public var appShares: [AppShare]?
-    /// Tokens counted from this Mac's CLI logs (Claude Code and Codex accounts only).
+    /// API accounts: organization-wide tokens and spend for the last 7 days.
     public var tokens: TokenTotals?
+    public var spend: SpendTotals?
 
     public init(
         id: UUID,
@@ -170,6 +188,8 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
             fetchedAt: fetchedAt
         )
         appShares = usage.appShares.isEmpty ? nil : usage.appShares
+        tokens = usage.tokens
+        spend = usage.spend
     }
 
     /// Highest utilization across all windows.

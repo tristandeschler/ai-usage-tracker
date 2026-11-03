@@ -6,11 +6,14 @@ public struct ClaudeOrganization: Identifiable, Hashable, Sendable {
     public var id: String
     public var name: String
     public var capabilities: [String]
+    /// e.g. `default_claude_max_20x`, when claude.ai includes it.
+    public var rateLimitTier: String?
 
-    public init(id: String, name: String, capabilities: [String]) {
+    public init(id: String, name: String, capabilities: [String], rateLimitTier: String? = nil) {
         self.id = id
         self.name = name
         self.capabilities = capabilities
+        self.rateLimitTier = rateLimitTier
     }
 
     init?(json: [String: Any]) {
@@ -18,7 +21,8 @@ public struct ClaudeOrganization: Identifiable, Hashable, Sendable {
         self.init(
             id: id,
             name: (json["name"] as? String) ?? "Claude",
-            capabilities: (json["capabilities"] as? [String]) ?? []
+            capabilities: (json["capabilities"] as? [String]) ?? [],
+            rateLimitTier: json["rate_limit_tier"] as? String
         )
     }
 
@@ -29,7 +33,9 @@ public struct ClaudeOrganization: Identifiable, Hashable, Sendable {
 
     public var plan: String? {
         let caps = Set(capabilities)
-        if caps.contains("claude_max") { return "Max" }
+        if caps.contains("claude_max") {
+            return ClaudeUsageParser.planName(subscriptionType: "max", rateLimitTier: rateLimitTier)
+        }
         if caps.contains("claude_pro") { return "Pro" }
         if caps.contains(where: { $0.contains("enterprise") }) { return "Enterprise" }
         if caps.contains("raven") || caps.contains(where: { $0.contains("team") }) { return "Team" }

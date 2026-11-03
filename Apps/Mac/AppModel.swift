@@ -61,7 +61,6 @@ final class AppModel {
     let secrets = KeychainSecretStore()
     private let fetcher: UsageFetcher
     private let notifier = Notifier()
-    private let tokenScanner = TokenLogScanner()
     private var alertState = AlertState()
     private var pollTask: Task<Void, Never>?
 
@@ -149,16 +148,6 @@ final class AppModel {
             return collected
         }
 
-        // Token counts come from local CLI logs, so they're available even when the usage fetch fails.
-        var tokens: [UUID: TokenTotals] = [:]
-        for account in enabled {
-            switch account.source {
-            case .claudeCode: tokens[account.id] = await tokenScanner.claudeCodeTotals()
-            case let .codexCLI(path): tokens[account.id] = await tokenScanner.codexTotals(authFilePath: path)
-            case .claudeWeb, .chatGPTWeb: break
-            }
-        }
-
         var alerts: [UsageAlert] = []
         let now = Date()
         for fresh in results {
@@ -173,7 +162,6 @@ final class AppModel {
                 snapshot.appShares = previous.appShares
                 snapshot.fetchedAt = previous.fetchedAt
             }
-            snapshot.tokens = tokens[snapshot.id]
             snapshots[snapshot.id] = snapshot
             alerts += AlertEvaluator.evaluate(
                 fresh, thresholds: settings.thresholds, notifyOnReset: settings.notifyOnReset, state: &alertState
@@ -248,6 +236,22 @@ final class AppModel {
         } catch {
             try? secrets.delete(key)
             try? secrets.delete(UsageFetcher.userAgentKey(key))
+            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+        add(account)
+        return nil
+    }
+
+    /// Checks an admin key against the provider, then stores it and adds the account.
+    /// Returns an error message instead when the key doesn't work.
+    func addAdminAccount(source: CredentialSource, key: String) async -> String? {
+        let account = AccountConfig(name: source.provider == .anthropic ? "Anthropic API" : "OpenAI API", source: source)
+        let secretKey = account.id.uuidString
+        do {
+            try secrets.write(key, for: secretKey)
+            _ = try await fetcher.usage(for: account)
+        } catch {
+            try? secrets.delete(secretKey)
             return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         add(account)

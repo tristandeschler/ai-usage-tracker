@@ -21,15 +21,4 @@ struct LiveTests {
         #expect(snapshot.error == nil)
         #expect(!snapshot.windows.isEmpty)
     }
-
-    @Test func localTokenLogs() async {
-        let scanner = TokenLogScanner()
-        let clock = ContinuousClock()
-        var claude = TokenTotals()
-        let first = await clock.measure { claude = await scanner.claudeCodeTotals() }
-        let second = await clock.measure { _ = await scanner.claudeCodeTotals() }
-        let codex = await scanner.codexTotals(authFilePath: CodexAuthFile.defaultPath())
-        print("Claude Code tokens today:", claude.today.total, "7d:", claude.lastSevenDays.total, claude.lastSevenDays, "scan:", first, "cached:", second)
-        print("Codex tokens today:", codex.today.total, "7d:", codex.lastSevenDays.total)
-    }
 }

@@ -34,6 +34,8 @@ public struct UsageFetcher: Sendable {
         case let .claudeWeb(organizationID): try await claudeWebUsage(secretKey: account.id.uuidString, organizationID: organizationID)
         case let .codexCLI(path): try await codexCLIUsage(path: path)
         case .chatGPTWeb: try await chatGPTWebUsage(secretKey: account.id.uuidString)
+        case .anthropicAdmin: try await adminUsage(provider: .anthropic, secretKey: account.id.uuidString)
+        case .openAIAdmin: try await adminUsage(provider: .openai, secretKey: account.id.uuidString)
         }
     }
 
@@ -183,7 +185,7 @@ public struct UsageFetcher: Sendable {
 
     // MARK: Shared
 
-    private func check(_ response: HTTPURLResponse, data: Data, reauthHint: String) throws {
+    func check(_ response: HTTPURLResponse, data: Data, reauthHint: String) throws {
         switch response.statusCode {
         case 200 ..< 300:
             return

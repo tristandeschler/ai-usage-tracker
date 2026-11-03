@@ -29,124 +29,124 @@ private extension UIColor {
 }
 #endif
 
-enum TokenFormat {
+/// Brand colors for charts. Anthropic's clay, sky and fig, and OpenAI's green, each stepped
+/// for light and dark and checked for colorblind separation.
+enum BrandPalette {
+    static func accent(_ provider: ProviderKind) -> Color {
+        switch provider {
+        case .anthropic: .adaptive(light: 0xD97757, dark: 0xCF6A48)  // clay
+        case .openai: .adaptive(light: 0x10A37F, dark: 0x19B98F)     // OpenAI green
+        }
+    }
+
+    /// Recessive bars and "Other": Anthropic's cloud gray, or OpenAI's neutral gray.
+    static func muted(_ provider: ProviderKind) -> Color {
+        switch provider {
+        case .anthropic: .adaptive(light: 0xBFBFBA, dark: 0x666663)
+        case .openai: .adaptive(light: 0xC5C5D2, dark: 0x565869)
+        }
+    }
+
+    /// Claude apps in a fixed order, so a color always means the same app.
+    static let claudeApps: [String: Color] = [
+        "Claude Code": .adaptive(light: 0xD97757, dark: 0xCF6A48), // clay
+        "Chats": .adaptive(light: 0x4A86C5, dark: 0x5A93D0),       // sky
+        "Cowork": .adaptive(light: 0xC25A85, dark: 0xC9628D),      // fig
+    ]
+}
+
+enum UsageFormat {
     /// "33.1M", "1.4B", "812".
-    static func short(_ count: Int) -> String {
+    static func tokens(_ count: Int) -> String {
         count.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)))
+    }
+
+    /// "$12.40", "$1,284".
+    static func dollars(_ amount: Double) -> String {
+        amount.formatted(.currency(code: "USD").precision(.fractionLength(amount >= 1_000 ? 0 : 2)))
     }
 
     static func breakdown(_ counts: TokenCounts, title: String) -> String {
         """
         \(title)
-        Input: \(short(counts.input))
-        Output: \(short(counts.output))
-        Cache reads: \(short(counts.cacheRead))
-        Cache writes: \(short(counts.cacheWrite))
+        Input: \(tokens(counts.input))
+        Output: \(tokens(counts.output))
+        Cache reads: \(tokens(counts.cacheRead))
+        Cache writes: \(tokens(counts.cacheWrite))
         """
     }
 }
 
-/// Today and the last 7 days of tokens from this Mac's CLI logs, with a per-day bar chart.
-struct TokenSection: View {
-    let tokens: TokenTotals
-    let accent: Color
+/// An API account's spend and tokens for today and the last 7 days, with daily spend as bars.
+struct APIUsageSection: View {
+    let spend: SpendTotals?
+    let tokens: TokenTotals?
+    let provider: ProviderKind
     let now: Date
     @State private var hoveredDay: Int?
 
     private struct Day: Identifiable {
         let id: Int
         let date: Date
-        let total: Int
+        let amount: Double
     }
 
     private var days: [Day] {
-        let calendar = Calendar.current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
         let today = calendar.startOfDay(for: now)
-        let daily = tokens.daily ?? []
-        return daily.enumerated().map { index, total in
+        let daily = spend?.daily ?? []
+        return daily.enumerated().map { index, amount in
             let date = calendar.date(byAdding: .day, value: index - (daily.count - 1), to: today) ?? today
-            return Day(id: index, date: date, total: total)
+            return Day(id: index, date: date, amount: amount)
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Tokens on this Mac")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            if tokens.lastSevenDays.total == 0 {
-                Text("Nothing logged in the last 7 days")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                tiles
+        HStack(alignment: .top, spacing: 16) {
+            stat("Today", spend: spend?.today, tokens: tokens?.today)
+            VStack(alignment: .leading, spacing: 4) {
+                if let hovered = hoveredDay.flatMap({ index in days.indices.contains(index) ? days[index] : nil }) {
+                    stat(hovered.id == days.count - 1 ? "Today" : hovered.date.formatted(Date.FormatStyle(timeZone: TimeZone(identifier: "UTC")!).weekday(.wide)),
+                         spend: hovered.amount, tokens: nil)
+                } else {
+                    stat("Last 7 days", spend: spend?.lastSevenDays, tokens: tokens?.lastSevenDays)
+                }
+                if days.contains(where: { $0.amount > 0 }) { chart }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private var tiles: some View {
-            HStack(alignment: .top, spacing: 16) {
-                stat("Today", value: tokens.today.total, detail: comparison)
-                    .help(TokenFormat.breakdown(tokens.today, title: "Today"))
-                VStack(alignment: .leading, spacing: 4) {
-                    stat(hoveredLabel ?? "Last 7 days", value: hoveredValue ?? tokens.lastSevenDays.total, detail: nil)
-                        .help(TokenFormat.breakdown(tokens.lastSevenDays, title: "Last 7 days"))
-                    if !days.isEmpty { chart }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-    }
-
-    private func stat(_ label: String, value: Int, detail: String?) -> some View {
+    private func stat(_ label: String, spend: Double?, tokens: TokenCounts?) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text(TokenFormat.short(value))
+            Text(spend.map(UsageFormat.dollars) ?? "–")
                 .font(.title3.weight(.semibold))
                 .contentTransition(.numericText())
-            if let detail {
-                Text(detail)
+            if let tokens {
+                Text("\(UsageFormat.tokens(tokens.total)) tokens")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .help(UsageFormat.breakdown(tokens, title: label))
             }
         }
-        .frame(minWidth: 70, alignment: .leading)
+        .frame(minWidth: 80, alignment: .leading)
     }
 
-    /// Today against the six days before it.
-    private var comparison: String? {
-        guard let average = tokens.previousDailyAverage else { return nil }
-        let ratio = Double(tokens.today.total) / average
-        switch ratio {
-        case ..<0.85: return "below your usual"
-        case ...1.15: return "about your usual"
-        default: return "\(ratio.formatted(.number.precision(.fractionLength(1))))× your usual"
-        }
-    }
-
-    private var hoveredLabel: String? {
-        guard let hoveredDay, days.indices.contains(hoveredDay) else { return nil }
-        let day = days[hoveredDay]
-        return hoveredDay == days.count - 1 ? "Today" : day.date.formatted(.dateTime.weekday(.wide))
-    }
-
-    private var hoveredValue: Int? {
-        guard let hoveredDay, days.indices.contains(hoveredDay) else { return nil }
-        return days[hoveredDay].total
-    }
-
-    /// One bar per day; today in the account's color, earlier days recessive.
+    /// One bar per UTC day; today in the brand color, earlier days recessive.
     private var chart: some View {
         Chart(days) { day in
             BarMark(
+                // Days are categories so the bars get a width.
                 x: .value("Day", String(day.id)),
-                y: .value("Tokens", day.total),
+                y: .value("Spend", day.amount),
                 width: .ratio(0.7)
             )
             .cornerRadius(2)
-            .foregroundStyle(day.id == days.count - 1 ? accent : Color.gray.opacity(0.45))
+            .foregroundStyle(day.id == days.count - 1 ? BrandPalette.accent(provider) : BrandPalette.muted(provider))
             .opacity(hoveredDay == nil || hoveredDay == day.id ? 1 : 0.5)
         }
         .chartXAxis(.hidden)
@@ -158,7 +158,6 @@ struct TokenSection: View {
                 .onContinuousHover { phase in
                     switch phase {
                     case let .active(location):
-                        // Days are categories ("0"…"6"), so the hovered column maps straight to an index.
                         if let label: String = proxy.value(atX: location.x), let index = Int(label) {
                             hoveredDay = index
                         }
@@ -169,8 +168,8 @@ struct TokenSection: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 26)
-        .accessibilityLabel("Tokens per day for the last 7 days")
-        .accessibilityValue(days.map { "\($0.date.formatted(.dateTime.weekday(.wide))) \(TokenFormat.short($0.total))" }.joined(separator: ", "))
+        .accessibilityLabel("Spend per day for the last 7 days")
+        .accessibilityValue(days.map { "\($0.date.formatted(.dateTime.weekday(.wide))) \(UsageFormat.dollars($0.amount))" }.joined(separator: ", "))
     }
 }
 
@@ -178,19 +177,8 @@ struct TokenSection: View {
 struct AppShareBar: View {
     let shares: [AppShare]
 
-    /// Categorical slots in a fixed order, keyed by app so a color always means the same app.
-    /// Validated for colorblind separation on light and dark surfaces.
-    private static let slots: [Color] = [
-        .adaptive(light: 0x2A78D6, dark: 0x3987E5), // blue
-        .adaptive(light: 0xEB6834, dark: 0xD95926), // orange
-        .adaptive(light: 0x1BAF7A, dark: 0x199E70), // aqua
-        .adaptive(light: 0xEDA100, dark: 0xC98500), // yellow
-    ]
-    private static let knownApps = ["Claude Code", "Chats", "Cowork", "Other"]
-
     private func color(for share: AppShare) -> Color {
-        let index = Self.knownApps.firstIndex(of: share.name) ?? 3
-        return Self.slots[index]
+        BrandPalette.claudeApps[share.name] ?? BrandPalette.muted(.anthropic)
     }
 
     var body: some View {

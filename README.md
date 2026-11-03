@@ -10,12 +10,14 @@ A menu bar app for your Mac that shows how much of your Claude and ChatGPT plan 
 | claude.ai | You sign in inside the app. The cookie goes in your Keychain. | `claude.ai/api/organizations/{org}/usage` |
 | Codex CLI | Reads `auth.json` from your Codex folder (one folder per account) | `chatgpt.com/backend-api/wham/usage` |
 | chatgpt.com | You sign in inside the app. The cookie goes in your Keychain. | same, via `/api/auth/session` |
+| Anthropic API | An Admin API key (`sk-ant-admin…`), kept in your Keychain | `/v1/organizations/usage_report/messages` and `/cost_report` |
+| OpenAI API | An Admin API key, kept in your Keychain | `/v1/organization/usage/completions` and `/costs` |
 
-For each account you get the 5-hour and weekly limits, any per-model weekly limits, your plan, and when each one resets. The menu bar shows the account you're using right now, colored green, amber or red. You can switch it to show whichever account is closest to its limit.
+For each subscription you get the 5-hour and weekly limits, any per-model weekly limits, your plan, and when each one resets. Claude accounts also show how the week's usage splits across Claude Code, chats and Cowork. API accounts show your organization's spend and tokens for today and the last 7 days (UTC days, as the providers report them). Regular API keys can't read usage, so these need an admin key. The menu bar shows the account you're using right now, colored green, amber or red. You can switch it to show whichever account is closest to its limit.
 
 By default you get a notification at 80%, 95% and 100% of each limit, and another when a maxed-out account resets. You can change these in Settings.
 
-None of these endpoints are official APIs. They're what the Claude and ChatGPT apps use, so they can change without warning. Real responses are saved in `Packages/UsageKit/Tests/UsageKitTests/Fixtures`.
+The subscription endpoints aren't official APIs. They're what the Claude and ChatGPT apps use, so they can change without warning. Real responses are saved in `Packages/UsageKit/Tests/UsageKitTests/Fixtures`.
 
 ## More than one account
 

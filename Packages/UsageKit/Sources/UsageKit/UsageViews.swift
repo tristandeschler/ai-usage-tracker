@@ -186,7 +186,7 @@ public struct AccountCard: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.red)
                         .multilineTextAlignment(.trailing)
-                } else {
+                } else if snapshot.peakPercent != nil {
                     UsageRing(percent: snapshot.peakPercent)
                 }
             }
@@ -202,18 +202,17 @@ public struct AccountCard: View {
                 VStack(spacing: 10) {
                     ForEach(snapshot.windows) { WindowRow(window: $0, now: now) }
                 }
-            } else if snapshot.error == nil {
+            } else if snapshot.error == nil, snapshot.spend == nil {
                 Text("Nothing to show yet")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if let tokens = snapshot.tokens {
-                Divider().opacity(0.5)
-                TokenSection(tokens: tokens, accent: UsageStyle.providerColor(snapshot.provider), now: now)
+            if snapshot.spend != nil || snapshot.tokens != nil {
+                APIUsageSection(spend: snapshot.spend, tokens: snapshot.tokens, provider: snapshot.provider, now: now)
             }
             if let shares = snapshot.appShares, !shares.isEmpty {
-                if snapshot.tokens == nil { Divider().opacity(0.5) }
+                Divider().opacity(0.5)
                 AppShareBar(shares: shares)
             }
         }

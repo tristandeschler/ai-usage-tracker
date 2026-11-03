@@ -32,10 +32,10 @@ func fixture(_ name: String) throws -> Data {
     }
 
     @Test func planNames() {
-        #expect(ClaudeUsageParser.planName(subscriptionType: "max", rateLimitTier: "default_claude_max_20x") == "Max")
+        #expect(ClaudeUsageParser.planName(subscriptionType: "max", rateLimitTier: "default_claude_max_20x") == "Ultra")
         #expect(ClaudeUsageParser.planName(subscriptionType: "max", rateLimitTier: "default_claude_max_5x") == "Max")
         #expect(ClaudeUsageParser.planName(subscriptionType: "pro", rateLimitTier: nil) == "Pro")
-        #expect(ClaudeUsageParser.planName(subscriptionType: "ultra", rateLimitTier: "default_claude_ultra") == "Max")
+        #expect(ClaudeUsageParser.planName(subscriptionType: "ultra", rateLimitTier: "default_claude_ultra") == "Ultra")
         #expect(ClaudeUsageParser.planName(subscriptionType: nil, rateLimitTier: nil) == nil)
     }
 
@@ -45,6 +45,11 @@ func fixture(_ name: String) throws -> Data {
         #expect(creds.accessToken == "tok")
         #expect(creds.expiresAt == Date(timeIntervalSince1970: 1_793_989_910))
         #expect(creds.subscriptionType == "max")
+    }
+
+    @Test func appBreakdown() throws {
+        let usage = try ClaudeUsageParser.parse(try fixture("claude-oauth-usage"))
+        #expect(usage.appShares == [AppShare(name: "Claude Code", percent: 70), AppShare(name: "Chats", percent: 30)])
     }
 
     @Test func organizationsDropApiOnlyAndPreferPaid() throws {
