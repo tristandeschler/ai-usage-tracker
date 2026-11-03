@@ -41,7 +41,7 @@ adhoc_sign() {
     local resolved="$BUILD/$(basename "$2")"
     sed -e "s/\$(TT_APP_GROUP)/$TEAM.$BUNDLE_ID/" \
         -e "s/\$(AppIdentifierPrefix)\$(PRODUCT_BUNDLE_IDENTIFIER)/$TEAM.$BUNDLE_ID/" "$2" > "$resolved"
-    codesign --force --sign - --entitlements "$resolved" "$1"
+    codesign --force --sign - --options runtime --entitlements "$resolved" "$1"
 }
 
 if [ -n "${VERSION:-}" ]; then
