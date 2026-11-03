@@ -61,7 +61,7 @@ public enum CodexUsageParser {
 
     private static func describe(windowSeconds: Int?) -> (String, String, UsageWindow.Kind) {
         switch windowSeconds {
-        case 18_000: ("session", "Session (5h)", .session)
+        case 18_000: ("session", "5-hour session", .session)
         case 604_800: ("weekly", "Weekly", .weekly)
         case let s? where s % 86_400 == 0: ("window:\(s)", "\(s / 86_400)-day", .other)
         case let s? where s % 3_600 == 0: ("window:\(s)", "\(s / 3_600)h", .other)

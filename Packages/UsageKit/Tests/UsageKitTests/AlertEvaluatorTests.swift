@@ -8,7 +8,7 @@ import Testing
     func snapshot(_ windows: [(String, Double)], error: String? = nil) -> AccountSnapshot {
         AccountSnapshot(
             id: accountID, accountName: "Work", provider: .anthropic,
-            windows: windows.map { UsageWindow(id: $0.0, label: $0.0 == "session" ? "Session (5h)" : "Weekly", kind: .other, usedPercent: $0.1, resetsAt: nil) },
+            windows: windows.map { UsageWindow(id: $0.0, label: $0.0 == "session" ? "5-hour session" : "Weekly", kind: .other, usedPercent: $0.1, resetsAt: nil) },
             error: error
         )
     }

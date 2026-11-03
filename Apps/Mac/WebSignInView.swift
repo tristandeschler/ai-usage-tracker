@@ -101,7 +101,7 @@ struct WebSignInView: View {
                     Button("Open", action: openLink)
                         .disabled(URL(string: link.trimmingCharacters(in: .whitespaces))?.host() == nil)
                 }
-                Text("Email links open in your normal browser, which signs that browser in instead of this window. Copy the link and paste it above. Google sign-in may be blocked here, so use email if it is.")
+                Text("Signing in by email? Don't click the link. That signs in your browser, not this window. Copy it and paste it above instead. If Google won't let you in here, use email.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -150,7 +150,7 @@ struct WebSignInView: View {
         }
         selectedOrganizations = Set(organizations.filter { !model.isTracking(claudeOrganization: $0.id) }.map(\.id))
         pendingSession = PendingSession(cookies: cookies, userAgent: userAgent, organizations: organizations)
-        status = "This login has \(organizations.count) Claude accounts. Choose which to track."
+        status = "This login has \(organizations.count) Claude accounts. Pick the ones to track."
         return nil
     }
 
@@ -180,9 +180,9 @@ struct WebSignInView: View {
 
     private func organizationPicker(_ session: PendingSession) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Which Claude accounts should Token Tracker track?")
+            Text("Which accounts do you want to track?")
                 .font(.headline)
-            Text("Your login belongs to several Claude organizations, each with its own usage limits.")
+            Text("Your email is on more than one Claude plan, and each one has its own limits.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 10) {

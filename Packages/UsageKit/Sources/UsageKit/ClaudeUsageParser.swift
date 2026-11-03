@@ -18,7 +18,7 @@ public enum ClaudeUsageParser {
 
         if let fiveHour = window(json["five_hour"]) {
             windows.append(UsageWindow(
-                id: "session", label: "Session (5h)", kind: .session,
+                id: "session", label: "5-hour session", kind: .session,
                 usedPercent: fiveHour.percent, resetsAt: fiveHour.resetsAt
             ))
         }
@@ -62,7 +62,7 @@ public enum ClaudeUsageParser {
         let model = ((entry["scope"] as? [String: Any])?["model"] as? [String: Any])?["display_name"] as? String
 
         if group == "session" || kind.contains("session") || kind.contains("five_hour") {
-            return UsageWindow(id: "session", label: "Session (5h)", kind: .session, usedPercent: percent, resetsAt: resetsAt)
+            return UsageWindow(id: "session", label: "5-hour session", kind: .session, usedPercent: percent, resetsAt: resetsAt)
         }
         if let model {
             return UsageWindow(

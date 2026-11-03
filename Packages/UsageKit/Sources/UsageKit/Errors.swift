@@ -11,19 +11,23 @@ public enum UsageError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case let .notSignedIn(hint): "Not signed in. \(hint)"
+        case let .notSignedIn(hint): "Signed out. \(hint)"
         case let .expired(hint): "Login expired. \(hint)"
-        case let .unauthorized(hint): "Unauthorized. \(hint)"
+        case let .unauthorized(hint): "The login was rejected. \(hint)"
         case let .rateLimited(retryAfter):
             if let retryAfter {
-                "Rate limited by the provider until \(retryAfter.formatted(date: .omitted, time: .shortened))."
+                "Checked too often. Trying again at \(retryAfter.formatted(date: .omitted, time: .shortened))."
             } else {
-                "Rate limited by the provider. Will retry later."
+                "Checked too often. Trying again in a bit."
             }
-        case .blockedByCloudflare: "The provider's bot protection blocked the request. Sign in again."
+        case .blockedByCloudflare: "Blocked by the site's bot check. Sign in again."
         case let .http(status, body):
-            if let body, !body.isEmpty { "HTTP \(status): \(body.prefix(200))" } else { "HTTP \(status)" }
-        case let .invalidResponse(detail): "Unexpected response: \(detail)"
+            if let body, !body.isEmpty {
+                "Something went wrong on their end (HTTP \(status)): \(body.prefix(200))"
+            } else {
+                "Something went wrong on their end (HTTP \(status))."
+            }
+        case let .invalidResponse(detail): "Got a response the app doesn't understand (\(detail))."
         }
     }
 }

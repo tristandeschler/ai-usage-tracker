@@ -57,14 +57,14 @@ private struct AccountsSettings: View {
             HStack(spacing: 8) {
                 Menu {
                     Section("Claude") {
-                        Button("Use Claude Code login on this Mac") {
+                        Button("Claude Code on this Mac") {
                             model.add(AccountConfig(name: "Claude Code", source: .claudeCode))
                         }
                         .disabled(model.hasClaudeCodeAccount)
                         Button("Sign in to claude.ai…") { signIn(.claude) }
                     }
                     Section("ChatGPT / Codex") {
-                        Button("Use a Codex CLI login…") { chooseCodexHome() }
+                        Button("Codex CLI…") { chooseCodexHome() }
                         Button("Sign in to chatgpt.com…") { signIn(.chatGPT) }
                     }
                 } label: {
@@ -97,7 +97,7 @@ private struct AccountsSettings: View {
 
     private func chooseCodexHome() {
         let panel = NSOpenPanel()
-        panel.message = "Choose a Codex home folder (the one containing auth.json). Use a separate CODEX_HOME per account."
+        panel.message = "Pick the folder Codex keeps its login in (usually ~/.codex). For a second account, log in with a different CODEX_HOME."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.showsHiddenFiles = true
@@ -113,7 +113,7 @@ private struct AccountsSettings: View {
         } catch {
             let alert = NSAlert(error: error)
             alert.messageText = "No Codex login in that folder"
-            alert.informativeText = "Run `CODEX_HOME=\(url.path) codex login` first, then try again."
+            alert.informativeText = "Run `CODEX_HOME=\(url.path) codex login`, then try again."
             alert.runModal()
         }
     }
@@ -184,15 +184,15 @@ private struct AlertsSettings: View {
                     ))
                 }
             } header: {
-                Text("Notify when any session or weekly window reaches")
+                Text("Notify me at")
             } footer: {
-                Text("Each threshold fires once per window, for every account.")
+                Text("Each one fires once per limit window, for every account.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                Toggle("Notify when a limited account is available again", isOn: $model.settings.notifyOnReset)
+                Toggle("Tell me when a maxed-out account is good to go again", isOn: $model.settings.notifyOnReset)
             }
         }
         .formStyle(.grouped)
@@ -214,8 +214,8 @@ private struct GeneralSettings: View {
                 }
             }
             Picker("Menu bar shows", selection: $model.settings.menuBarMode) {
-                Text("Account in use (usage going up)").tag(MenuBarMode.activeAccount)
-                Text("Highest usage across accounts").tag(MenuBarMode.highestUsage)
+                Text("The account I'm using").tag(MenuBarMode.activeAccount)
+                Text("Whichever account is closest to its limit").tag(MenuBarMode.highestUsage)
                 Text("Icon only").tag(MenuBarMode.iconOnly)
             }
             Toggle("Launch at login", isOn: $launchAtLogin)

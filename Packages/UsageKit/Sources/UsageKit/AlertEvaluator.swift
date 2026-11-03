@@ -17,12 +17,18 @@ public struct UsageAlert: Hashable, Sendable {
     public var title: String {
         switch kind {
         case let .crossed(threshold) where threshold >= 100:
-            "\(accountName) hit its \(window.label.lowercased()) limit"
+            "\(accountName) hit its \(limitName) limit"
         case let .crossed(threshold):
-            "\(accountName) is at \(Int(threshold))% of its \(window.label.lowercased()) limit"
+            "\(accountName) is at \(Int(threshold))% of its \(limitName) limit"
         case .reset:
-            "\(accountName) is available again"
+            "\(accountName) is good to go again"
         }
+    }
+
+    /// "Weekly · Opus" reads as "weekly Opus" mid-sentence.
+    private var limitName: String {
+        let label = window.label.replacingOccurrences(of: " · ", with: " ")
+        return label.prefix(1).lowercased() + label.dropFirst()
     }
 
     public var body: String {
@@ -34,7 +40,7 @@ public struct UsageAlert: Hashable, Sendable {
                 "\(provider.displayName) · \(Int(window.usedPercent.rounded()))% used"
             }
         case .reset:
-            "\(provider.displayName) · \(window.label) is down to \(Int(window.usedPercent.rounded()))%"
+            "\(provider.displayName) · the \(limitName) limit has reset"
         }
     }
 }
@@ -93,7 +99,7 @@ public enum AlertEvaluator {
             guard previous >= 100, notifyOnReset else { continue }
             let windowID = String(key.dropFirst(prefix.count))
             let window = UsageWindow(
-                id: windowID, label: windowID == "session" ? "Session (5h)" : windowID,
+                id: windowID, label: windowID == "session" ? "5-hour session" : windowID,
                 kind: windowID == "session" ? .session : .other, usedPercent: 0, resetsAt: nil
             )
             alerts.append(UsageAlert(kind: .reset, accountID: snapshot.id, accountName: snapshot.accountName, provider: snapshot.provider, window: window))

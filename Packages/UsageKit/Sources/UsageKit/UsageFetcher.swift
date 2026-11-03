@@ -47,7 +47,7 @@ public struct UsageFetcher: Sendable {
     // MARK: Claude
 
     private func claudeCodeUsage() async throws -> ProviderUsage {
-        guard let claudeCode else { throw UsageError.notSignedIn("Claude Code logins are only readable on a Mac.") }
+        guard let claudeCode else { throw UsageError.notSignedIn("Claude Code logins only work on a Mac.") }
         let credentials = try claudeCode.load()
         if let expiresAt = credentials.expiresAt, expiresAt < Date() {
             throw UsageError.expired("Open Claude Code once to refresh its login.")
@@ -102,7 +102,7 @@ public struct UsageFetcher: Sendable {
         let org: ClaudeOrganization
         if let organizationID {
             guard let match = orgs.first(where: { $0.id == organizationID }) else {
-                throw UsageError.notSignedIn("This login no longer has access to that Claude organization.")
+                throw UsageError.notSignedIn("This login can't see that Claude account anymore.")
             }
             org = match
         } else {

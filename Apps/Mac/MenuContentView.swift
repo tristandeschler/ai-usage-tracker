@@ -80,7 +80,7 @@ struct MenuContentView: View {
                 .font(.system(size: 34))
                 .foregroundStyle(.secondary)
             Text("No accounts yet").font(.headline)
-            Text("Add your Claude and ChatGPT accounts to start tracking limits.")
+            Text("Add a Claude or ChatGPT account to see how much you have left.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

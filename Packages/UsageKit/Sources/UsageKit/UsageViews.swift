@@ -172,7 +172,7 @@ public struct AccountCard: View {
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(.green.opacity(0.15), in: Capsule())
-                                .help("Usage is going up; shown in the menu bar")
+                                .help("You're using this one right now, so it's the one in the menu bar")
                         }
                     }
                     Text(subtitle)
@@ -203,7 +203,7 @@ public struct AccountCard: View {
                     ForEach(snapshot.windows) { WindowRow(window: $0, now: now) }
                 }
             } else if snapshot.error == nil {
-                Text("No active limits right now")
+                Text("Nothing to show yet")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

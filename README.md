@@ -1,46 +1,50 @@
 # Token Tracker
 
-A macOS menu bar app that tracks Claude and ChatGPT/Codex plan usage across multiple accounts and notifies you as you approach or hit a limit.
+A menu bar app for your Mac that shows how much of your Claude and ChatGPT plan limits you've used, across as many accounts as you have. It pings you before you run out and again when you're good to go.
 
 ## What it tracks
 
-| Account type | How it signs in | Endpoint |
+| Account | How it gets in | Where it asks |
 |---|---|---|
-| Claude Code login | Reads Claude Code's Keychain item (read-only) | `api.anthropic.com/api/oauth/usage` |
-| claude.ai session | Sign in inside the app; cookies stored in your Keychain | `claude.ai/api/organizations/{org}/usage` |
-| Codex CLI login | Reads `$CODEX_HOME/auth.json` (one per `CODEX_HOME`) | `chatgpt.com/backend-api/wham/usage` |
-| chatgpt.com session | Sign in inside the app; cookies stored in your Keychain | same, via `/api/auth/session` |
+| Claude Code | Reads Claude Code's login from your Keychain. Never changes it. | `api.anthropic.com/api/oauth/usage` |
+| claude.ai | You sign in inside the app. The cookie goes in your Keychain. | `claude.ai/api/organizations/{org}/usage` |
+| Codex CLI | Reads `auth.json` from your Codex folder (one folder per account) | `chatgpt.com/backend-api/wham/usage` |
+| chatgpt.com | You sign in inside the app. The cookie goes in your Keychain. | same, via `/api/auth/session` |
 
-Each account shows its session (5h) and weekly windows, model-scoped weekly limits, plan, and reset countdowns. The menu bar shows the highest usage across accounts.
+For each account you get the 5-hour and weekly limits, any per-model weekly limits, your plan, and when each one resets. The menu bar shows the account you're using right now, colored green, amber or red. You can switch it to show whichever account is closest to its limit.
 
-Alerts fire once per threshold per window (default 80%, 95%, 100%), plus an "available again" alert when a limited window resets.
+By default you get a notification at 80%, 95% and 100% of each limit, and another when a maxed-out account resets. You can change these in Settings.
 
-These are undocumented endpoints that the official apps use, so they can change without notice. `Packages/UsageKit/Tests/UsageKitTests/Fixtures` holds real responses for reference.
+None of these endpoints are official APIs. They're what the Claude and ChatGPT apps use, so they can change without warning. Real responses are saved in `Packages/UsageKit/Tests/UsageKitTests/Fixtures`.
 
-## Multiple accounts
+## More than one account
 
-- **Claude:** use "Sign in to claude.ai…" once per account. Each sign-in uses an isolated browser session.
-- **ChatGPT/Codex:** use "Sign in to chatgpt.com…", or give each account its own Codex home (`CODEX_HOME=~/.codex-work codex login`) and add that folder.
+- **Claude:** use "Sign in to claude.ai…" once for each account. If one email is on several Claude plans (say, personal and work), you'll get to pick which ones to track.
+- **ChatGPT/Codex:** use "Sign in to chatgpt.com…", or log each account into its own Codex folder (`CODEX_HOME=~/.codex-work codex login`) and add that folder.
 
-## Build
+## Building it
 
-Requires macOS 26 (Liquid Glass), Xcode 26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+You need macOS 26, Xcode 26 or later, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
-make test        # UsageKit unit tests
-make live-test   # hit the real endpoints with this Mac's Claude Code + Codex logins
-make run         # build and launch from the build folder (development)
-make install     # Release build into /Applications and launch it
+make test        # run the tests
+make live-test   # check against your real Claude Code and Codex logins
+make run         # build and open it from the build folder
+make install     # build a release copy into /Applications and open it
 ```
 
-`make project` regenerates `TokenTracker.xcodeproj` from `project.yml` (the project file is not committed).
+`make project` rebuilds `TokenTracker.xcodeproj` from `project.yml`. The Xcode project isn't checked in.
 
-## Layout
+## Where things are
 
 ```
-Packages/UsageKit   Shared models, provider clients, parsers, alert logic, SwiftUI cards
-Apps/Mac            Menu bar app (MenuBarExtra), settings, web sign-in
-Apps/Shared         App icon and provider logos
+Packages/UsageKit   Fetching, parsing, alert logic and the shared SwiftUI views
+Apps/Mac            The menu bar app, settings and sign-in window
+Apps/Shared         App icon and the Claude/OpenAI logos
 ```
 
-Everything runs locally: logins stay in your Keychain or the CLIs' own files, and the app only talks to the providers. An iOS companion (synced over iCloud) is planned; an earlier draft lives in git history.
+## Privacy
+
+Everything stays on your Mac. Logins live in your Keychain or in the CLIs' own files, and the app only talks to Anthropic and OpenAI. There's no server, no analytics and no tracking.
+
+An iPhone app that syncs over iCloud is on the list. An earlier draft is in the git history.
