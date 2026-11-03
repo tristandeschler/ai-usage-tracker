@@ -22,14 +22,16 @@ private struct AccountsSettings: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @State private var selection: UUID?
+    @State private var renaming: AccountConfig?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             List(selection: $selection) {
                 ForEach(model.accounts) { account in
-                    AccountRow(account: account)
+                    AccountRow(account: account) { renaming = account }
                         .tag(account.id)
                         .contextMenu {
+                            Button("Rename…") { renaming = account }
                             Button("Remove", role: .destructive) { model.remove(account) }
                         }
                 }
@@ -69,12 +71,13 @@ private struct AccountsSettings: View {
                 .disabled(selection == nil)
 
                 Spacer()
-                Text("Drag to reorder. Names are editable.")
+                Text("Drag to reorder. Double-click to rename.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(10)
         }
+        .renameAccountAlert($renaming)
     }
 
     private func signIn(_ target: WebSignInView.Target) {
@@ -109,16 +112,15 @@ private struct AccountsSettings: View {
 private struct AccountRow: View {
     @Environment(AppModel.self) private var model
     let account: AccountConfig
-    @State private var name = ""
+    let onRename: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             ProviderBadge(account.provider)
             VStack(alignment: .leading, spacing: 2) {
-                TextField("Name", text: $name)
-                    .textFieldStyle(.plain)
+                Text(account.name)
                     .font(.body.weight(.medium))
-                    .onSubmit(commitName)
+                    .lineLimit(1)
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -126,6 +128,10 @@ private struct AccountRow: View {
                     .truncationMode(.middle)
             }
             Spacer()
+            Button("Rename", systemImage: "pencil", action: onRename)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .help("Rename")
             Toggle("Enabled", isOn: Binding(
                 get: { account.isEnabled },
                 set: { var updated = account; updated.isEnabled = $0; model.update(updated) }
@@ -135,8 +141,8 @@ private struct AccountRow: View {
             .controlSize(.small)
         }
         .padding(.vertical, 4)
-        .onAppear { name = account.name }
-        .onChange(of: account.name) { name = account.name }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2, perform: onRename)
     }
 
     private var detail: String {
@@ -146,14 +152,6 @@ private struct AccountRow: View {
         default:
             account.source.displayName
         }
-    }
-
-    private func commitName() {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, trimmed != account.name else { return }
-        var updated = account
-        updated.name = trimmed
-        model.update(updated)
     }
 }
 

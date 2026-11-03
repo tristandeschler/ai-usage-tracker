@@ -4,6 +4,7 @@ import UsageKit
 struct MenuContentView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
+    @State private var renaming: AccountConfig?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -22,6 +23,7 @@ struct MenuContentView: View {
                                         isActive: model.settings.menuBarMode == .activeAccount
                                             && snapshot.id == model.activeAccountID
                                     )
+                                    .contextMenu { cardMenu(for: snapshot.id) }
                                 }
                             }
                         }
@@ -36,6 +38,7 @@ struct MenuContentView: View {
         }
         .padding(12)
         .frame(width: 360)
+        .renameAccountAlert($renaming)
     }
 
     private var header: some View {
@@ -116,6 +119,18 @@ struct MenuContentView: View {
             }
             .buttonStyle(.glass)
             .controlSize(.regular)
+        }
+    }
+
+    @ViewBuilder
+    private func cardMenu(for id: UUID) -> some View {
+        if let account = model.accounts.first(where: { $0.id == id }) {
+            Button("Rename…") { renaming = account }
+            Button("Hide from Menu") {
+                var updated = account
+                updated.isEnabled = false
+                model.update(updated)
+            }
         }
     }
 
