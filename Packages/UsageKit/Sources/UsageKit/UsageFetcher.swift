@@ -31,7 +31,7 @@ public struct UsageFetcher: Sendable {
     public func usage(for account: AccountConfig) async throws -> ProviderUsage {
         switch account.source {
         case .claudeCode: try await claudeCodeUsage()
-        case .claudeWeb: try await claudeWebUsage(secretKey: account.id.uuidString)
+        case let .claudeWeb(organizationID): try await claudeWebUsage(secretKey: account.id.uuidString, organizationID: organizationID)
         case let .codexCLI(path): try await codexCLIUsage(path: path)
         case .chatGPTWeb: try await chatGPTWebUsage(secretKey: account.id.uuidString)
         }
@@ -68,7 +68,18 @@ public struct UsageFetcher: Sendable {
         return usage
     }
 
-    private func claudeWebUsage(secretKey: String) async throws -> ProviderUsage {
+    /// Lists the organizations a claude.ai session can see, so the user can pick which to track.
+    public func claudeOrganizations(cookies: String, userAgent: String?) async throws -> [ClaudeOrganization] {
+        var request = URLRequest(url: URL(string: "https://claude.ai/api/organizations")!)
+        request.setValue(cookies, forHTTPHeaderField: "Cookie")
+        request.setValue(userAgent ?? Self.browserUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await http.send(request)
+        try check(response, data: data, reauthHint: "Sign in to claude.ai again.")
+        return try ClaudeOrganization.parseList(data)
+    }
+
+    private func claudeWebUsage(secretKey: String, organizationID: String?) async throws -> ProviderUsage {
         let hint = "Sign in to claude.ai again from Settings → Accounts."
         guard var cookies = try secrets.read(secretKey), !cookies.isEmpty else { throw UsageError.notSignedIn(hint) }
         let userAgent = userAgent(for: secretKey)
@@ -87,27 +98,24 @@ public struct UsageFetcher: Sendable {
             return data
         }
 
-        let orgsData = try await get("https://claude.ai/api/organizations")
-        guard let orgs = try JSONSerialization.jsonObject(with: orgsData) as? [[String: Any]],
-              let org = Self.preferredOrganization(orgs),
-              let orgID = org["uuid"] as? String
-        else { throw UsageError.invalidResponse("no Claude organization on this account") }
-
-        var usage = try ClaudeUsageParser.parse(try await get("https://claude.ai/api/organizations/\(orgID)/usage"))
-        let capabilities = (org["capabilities"] as? [String]) ?? []
-        usage.plan = capabilities.contains("claude_max") ? "Max" : capabilities.contains("claude_pro") ? "Pro" : nil
-        usage.identity = org["name"] as? String
-        return usage
-    }
-
-    static func preferredOrganization(_ orgs: [[String: Any]]) -> [String: Any]? {
-        func has(_ org: [String: Any], _ capability: String) -> Bool {
-            ((org["capabilities"] as? [String]) ?? []).contains(capability)
+        let orgs = try ClaudeOrganization.parseList(try await get("https://claude.ai/api/organizations"))
+        let org: ClaudeOrganization
+        if let organizationID {
+            guard let match = orgs.first(where: { $0.id == organizationID }) else {
+                throw UsageError.notSignedIn("This login no longer has access to that Claude organization.")
+            }
+            org = match
+        } else {
+            guard let preferred = ClaudeOrganization.preferred(orgs) else {
+                throw UsageError.invalidResponse("no Claude organization on this account")
+            }
+            org = preferred
         }
-        return orgs.first { has($0, "claude_max") }
-            ?? orgs.first { has($0, "claude_pro") }
-            ?? orgs.first { has($0, "chat") }
-            ?? orgs.first
+
+        var usage = try ClaudeUsageParser.parse(try await get("https://claude.ai/api/organizations/\(org.id)/usage"))
+        usage.plan = org.plan
+        usage.identity = org.displayName
+        return usage
     }
 
     // MARK: OpenAI

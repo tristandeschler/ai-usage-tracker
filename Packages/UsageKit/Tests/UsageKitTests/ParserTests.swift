@@ -47,13 +47,17 @@ func fixture(_ name: String) throws -> Data {
         #expect(creds.subscriptionType == "max")
     }
 
-    @Test func preferredOrganizationPicksPaidPlan() {
-        let orgs: [[String: Any]] = [
-            ["uuid": "api", "capabilities": ["api"]],
-            ["uuid": "free", "capabilities": ["chat"]],
-            ["uuid": "max", "capabilities": ["chat", "claude_max"]],
-        ]
-        #expect(UsageFetcher.preferredOrganization(orgs)?["uuid"] as? String == "max")
+    @Test func organizationsDropApiOnlyAndPreferPaid() throws {
+        let json = #"""
+        [{"uuid":"api","name":"API","capabilities":["api"]},
+         {"uuid":"team","name":"Acme","capabilities":["chat","raven"]},
+         {"uuid":"max","name":"me@example.com's Organization","capabilities":["chat","claude_max"]}]
+        """#
+        let orgs = try ClaudeOrganization.parseList(Data(json.utf8))
+        #expect(orgs.map(\.id) == ["team", "max"])
+        #expect(orgs.map(\.plan) == ["Team", "Max"])
+        #expect(orgs[1].displayName == "me@example.com")
+        #expect(ClaudeOrganization.preferred(orgs)?.id == "max")
     }
 }
 

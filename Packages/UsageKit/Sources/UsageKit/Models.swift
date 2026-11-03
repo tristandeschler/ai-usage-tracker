@@ -16,8 +16,9 @@ public enum ProviderKind: String, Codable, Sendable, CaseIterable {
 public enum CredentialSource: Codable, Hashable, Sendable {
     /// The account currently signed in to Claude Code on this Mac (read from its Keychain item).
     case claudeCode
-    /// claude.ai browser cookies, stored in our own Keychain under the account id.
-    case claudeWeb
+    /// claude.ai browser cookies, stored in our own Keychain under the account id. One login can
+    /// reach several organizations; nil tracks the paid personal one.
+    case claudeWeb(organizationID: String?)
     /// A Codex CLI `auth.json` (one per `CODEX_HOME`).
     case codexCLI(authFilePath: String)
     /// chatgpt.com browser cookies, stored in our own Keychain under the account id.

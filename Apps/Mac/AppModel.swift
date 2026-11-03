@@ -264,6 +264,14 @@ final class AppModel {
         return nil
     }
 
+    func claudeOrganizations(cookieHeader: String, userAgent: String?) async throws -> [ClaudeOrganization] {
+        try await fetcher.claudeOrganizations(cookies: cookieHeader, userAgent: userAgent)
+    }
+
+    func isTracking(claudeOrganization id: String) -> Bool {
+        accounts.contains { $0.source == .claudeWeb(organizationID: id) }
+    }
+
     var hasClaudeCodeAccount: Bool { accounts.contains { $0.source == .claudeCode } }
 
     func hasCodexAccount(path: String) -> Bool {

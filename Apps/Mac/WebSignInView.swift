@@ -27,7 +27,7 @@ struct WebSignInView: View {
 
         var source: CredentialSource {
             switch self {
-            case .claude: .claudeWeb
+            case .claude: .claudeWeb(organizationID: nil)
             case .chatGPT: .chatGPTWeb
             }
         }
@@ -71,6 +71,15 @@ struct WebSignInView: View {
     @State private var failed = false
     @State private var link = ""
     @State private var showPaste = false
+    /// Set when one login reaches several Claude organizations and the user must pick.
+    @State private var pendingSession: PendingSession?
+    @State private var selectedOrganizations: Set<String> = []
+
+    struct PendingSession {
+        var cookies: String
+        var userAgent: String?
+        var organizations: [ClaudeOrganization]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -102,6 +111,9 @@ struct WebSignInView: View {
             SignInWebView(target: target, controller: browser) { name, cookies, userAgent in
                 await finish(cookies: cookies, userAgent: userAgent, name: name)
             }
+            .overlay {
+                if let pendingSession { organizationPicker(pendingSession) }
+            }
         }
         .frame(minWidth: 520, minHeight: 640)
         .sheet(isPresented: $showPaste) {
@@ -122,15 +134,95 @@ struct WebSignInView: View {
     private func finish(cookies: String, userAgent: String?, name: String?) async -> String? {
         status = "Checking \(target.domain) usage…"
         failed = false
-        if let error = await model.addWebAccount(
-            source: target.source, cookieHeader: cookies, userAgent: userAgent, suggestedName: name
-        ) {
-            status = "Couldn't read usage: \(error)"
-            failed = true
-            return error
+
+        guard target == .claude else {
+            return await add(source: target.source, cookies: cookies, userAgent: userAgent, name: name)
+        }
+
+        let organizations: [ClaudeOrganization]
+        do {
+            organizations = try await model.claudeOrganizations(cookieHeader: cookies, userAgent: userAgent)
+        } catch {
+            return fail((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+        if organizations.count == 1, let org = organizations.first {
+            return await add(source: .claudeWeb(organizationID: org.id), cookies: cookies, userAgent: userAgent, name: org.displayName)
+        }
+        selectedOrganizations = Set(organizations.filter { !model.isTracking(claudeOrganization: $0.id) }.map(\.id))
+        pendingSession = PendingSession(cookies: cookies, userAgent: userAgent, organizations: organizations)
+        status = "This login has \(organizations.count) Claude accounts. Choose which to track."
+        return nil
+    }
+
+    private func add(source: CredentialSource, cookies: String, userAgent: String?, name: String?) async -> String? {
+        if let error = await model.addWebAccount(source: source, cookieHeader: cookies, userAgent: userAgent, suggestedName: name) {
+            return fail(error)
+        }
+        return nil
+    }
+
+    private func fail(_ error: String) -> String {
+        status = "Couldn't read usage: \(error)"
+        failed = true
+        return error
+    }
+
+    private func trackSelected(_ session: PendingSession) async {
+        for org in session.organizations where selectedOrganizations.contains(org.id) {
+            status = "Adding \(org.displayName)…"
+            guard await add(
+                source: .claudeWeb(organizationID: org.id), cookies: session.cookies,
+                userAgent: session.userAgent, name: org.displayName
+            ) == nil else { return }
         }
         dismiss()
-        return nil
+    }
+
+    private func organizationPicker(_ session: PendingSession) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Which Claude accounts should Token Tracker track?")
+                .font(.headline)
+            Text("Your login belongs to several Claude organizations, each with its own usage limits.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(session.organizations) { org in
+                    let tracked = model.isTracking(claudeOrganization: org.id)
+                    Toggle(isOn: Binding(
+                        get: { selectedOrganizations.contains(org.id) },
+                        set: { on in
+                            if on { selectedOrganizations.insert(org.id) } else { selectedOrganizations.remove(org.id) }
+                        }
+                    )) {
+                        HStack {
+                            Text(org.displayName)
+                            if let plan = org.plan {
+                                Text(plan)
+                                    .font(.caption.weight(.medium))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 1)
+                                    .background(.quaternary, in: Capsule())
+                            }
+                            if tracked {
+                                Text("Already tracked").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .disabled(tracked)
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Track Selected") { Task { await trackSelected(session) } }
+                    .buttonStyle(.glassProminent)
+                    .disabled(selectedOrganizations.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: 440)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.ultraThinMaterial)
     }
 }
 
