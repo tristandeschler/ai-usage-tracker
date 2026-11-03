@@ -9,4 +9,7 @@ TT_ENTITLEMENTS =
 // Shared with the widget so it can show the latest numbers (usage only, never credentials).
 TT_APP_GROUP = $(TeamIdentifierPrefix)$(TT_BUNDLE_PREFIX).TokenTracker
 
+// Where the app looks for updates (GitHub "owner/repo"). Forks should point this at their own.
+TT_UPDATE_REPOSITORY = tristandeschler/ai-usage-tracker
+
 #include? "Local.xcconfig"

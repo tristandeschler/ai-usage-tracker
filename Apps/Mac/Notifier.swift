@@ -29,6 +29,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
 
+    func postUpdate(version: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Token Tracker \(version) is out"
+        content.body = "Open the menu and click Update to install it."
+        center.add(UNNotificationRequest(identifier: "update-\(version)", content: content, trigger: nil))
+    }
+
     // Show banners even though a menu bar app is technically always "in the foreground".
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,

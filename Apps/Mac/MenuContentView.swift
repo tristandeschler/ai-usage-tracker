@@ -104,6 +104,8 @@ struct MenuContentView: View {
 
                 Spacer()
 
+                updateButton
+
                 Button {
                     NSApp.terminate(nil)
                 } label: {
@@ -113,6 +115,25 @@ struct MenuContentView: View {
             }
             .buttonStyle(.glass)
             .controlSize(.regular)
+        }
+    }
+
+    @ViewBuilder
+    private var updateButton: some View {
+        let updater = model.updater
+        switch updater.state {
+        case .downloading, .installing:
+            ProgressView().controlSize(.small).help("Installing the update…")
+        default:
+            if let release = updater.available {
+                Button {
+                    Task { await updater.install() }
+                } label: {
+                    Label("Update to \(release.version)", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.glassProminent)
+                .help(release.notes.isEmpty ? "Install Token Tracker \(release.version)" : release.notes)
+            }
         }
     }
 

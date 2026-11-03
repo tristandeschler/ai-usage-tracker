@@ -16,6 +16,8 @@ struct AppSettings: Codable, Equatable {
     var thresholds: [Double] = AlertEvaluator.defaultThresholds
     var notifyOnReset = true
     var menuBarMode = MenuBarMode.activeAccount
+    var checkForUpdates = true
+    var installUpdatesAutomatically = false
 
     init() {}
 
@@ -27,6 +29,8 @@ struct AppSettings: Codable, Equatable {
         thresholds = try c.decodeIfPresent([Double].self, forKey: .thresholds) ?? d.thresholds
         notifyOnReset = try c.decodeIfPresent(Bool.self, forKey: .notifyOnReset) ?? d.notifyOnReset
         menuBarMode = (try? c.decodeIfPresent(MenuBarMode.self, forKey: .menuBarMode)) ?? d.menuBarMode
+        checkForUpdates = try c.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? d.checkForUpdates
+        installUpdatesAutomatically = try c.decodeIfPresent(Bool.self, forKey: .installUpdatesAutomatically) ?? d.installUpdatesAutomatically
     }
 }
 
@@ -45,6 +49,7 @@ final class AppModel {
             guard settings != oldValue else { return }
             persist(settings, key: Keys.settings)
             if settings.refreshMinutes != oldValue.refreshMinutes { startPolling() }
+            if settings.checkForUpdates != oldValue.checkForUpdates { configureUpdates() }
         }
     }
 
@@ -60,6 +65,7 @@ final class AppModel {
     }
 
     let secrets = KeychainSecretStore()
+    let updater = Updater()
     private let fetcher: UsageFetcher
     private let notifier = Notifier()
     private var alertState = AlertState()
@@ -85,6 +91,19 @@ final class AppModel {
         if accounts.isEmpty { addDetectedLogins() }
         notifier.requestAuthorization()
         startPolling()
+        configureUpdates()
+    }
+
+    private func configureUpdates() {
+        updater.onFound = { [weak self] release in
+            guard let self else { return }
+            if settings.installUpdatesAutomatically {
+                Task { await self.updater.install() }
+            } else {
+                notifier.postUpdate(version: release.version)
+            }
+        }
+        if settings.checkForUpdates { updater.startChecking() } else { updater.stopChecking() }
     }
 
     // MARK: Derived state
