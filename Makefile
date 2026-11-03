@@ -20,6 +20,7 @@ build: project
 
 run: build
 	-pkill -x "Token Tracker"
+	sleep 1
 	open "$(APP)"
 
 # Release build copied to /Applications, so it survives rebuilds and shows up in Spotlight.
@@ -29,6 +30,7 @@ install: project
 	-pkill -x "Token Tracker"
 	rm -rf "/Applications/Token Tracker.app"
 	ditto "$(DERIVED)/Build/Products/Release/Token Tracker.app" "/Applications/Token Tracker.app"
+	sleep 1
 	open "/Applications/Token Tracker.app"
 
 # Needs a paid Apple Developer team (iCloud + push).

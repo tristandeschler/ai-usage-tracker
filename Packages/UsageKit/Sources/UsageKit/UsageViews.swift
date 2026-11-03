@@ -1,11 +1,26 @@
 import SwiftUI
 
+/// Traffic-light level for a usage percentage: green, then amber from 80%, red at the limit.
+public enum UsageLevel: Sendable {
+    case ok
+    case warning
+    case limited
+
+    public init(percent: Double) {
+        switch percent {
+        case 100...: self = .limited
+        case 80...: self = .warning
+        default: self = .ok
+        }
+    }
+}
+
 public enum UsageStyle {
     public static func color(for percent: Double) -> Color {
-        switch percent {
-        case 100...: .red
-        case 80...: .orange
-        default: .green
+        switch UsageLevel(percent: percent) {
+        case .limited: .red
+        case .warning: .orange
+        case .ok: .green
         }
     }
 

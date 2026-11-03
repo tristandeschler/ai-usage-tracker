@@ -62,7 +62,7 @@ struct MenuBarLabel: View {
         let snapshot = model.menuBarSnapshot
         let percent = snapshot?.peakPercent
         HStack(spacing: 3) {
-            Image(systemName: Self.symbol(for: percent, limited: snapshot?.isLimited == true))
+            Image(nsImage: Self.gauge(percent: percent, limited: snapshot?.isLimited == true))
             if let percent {
                 Text("\(Int(percent.rounded()))%")
                     .monospacedDigit()
@@ -73,6 +73,25 @@ struct MenuBarLabel: View {
             NSApp.activate()
             openSettings()
         }
+    }
+
+    /// The gauge tinted green, amber or red. Menu bar images are monochrome templates unless
+    /// they carry their own colors, so the color is baked into a non-template image.
+    static func gauge(percent: Double?, limited: Bool) -> NSImage {
+        let name = symbol(for: percent, limited: limited)
+        let base = NSImage(systemSymbolName: name, accessibilityDescription: "Usage")!
+        guard let percent else { return base }
+
+        let color: NSColor = switch limited ? .limited : UsageLevel(percent: percent) {
+        case .limited: .systemRed
+        case .warning: .systemOrange
+        case .ok: .systemGreen
+        }
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+            .applying(NSImage.SymbolConfiguration(hierarchicalColor: color))
+        let image = base.withSymbolConfiguration(config) ?? base
+        image.isTemplate = false
+        return image
     }
 
     static func symbol(for percent: Double?, limited: Bool) -> String {
