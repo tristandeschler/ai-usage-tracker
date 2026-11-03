@@ -61,6 +61,7 @@ final class AppModel {
     let secrets = KeychainSecretStore()
     private let fetcher: UsageFetcher
     private let notifier = Notifier()
+    private let tokenScanner = TokenLogScanner()
     private var alertState = AlertState()
     private var pollTask: Task<Void, Never>?
 
@@ -148,6 +149,16 @@ final class AppModel {
             return collected
         }
 
+        // Token counts come from local CLI logs, so they're available even when the usage fetch fails.
+        var tokens: [UUID: TokenTotals] = [:]
+        for account in enabled {
+            switch account.source {
+            case .claudeCode: tokens[account.id] = await tokenScanner.claudeCodeTotals()
+            case let .codexCLI(path): tokens[account.id] = await tokenScanner.codexTotals(authFilePath: path)
+            case .claudeWeb, .chatGPTWeb: break
+            }
+        }
+
         var alerts: [UsageAlert] = []
         let now = Date()
         for fresh in results {
@@ -159,8 +170,10 @@ final class AppModel {
                 snapshot.plan = previous.plan
                 snapshot.identity = previous.identity
                 snapshot.limitReached = previous.limitReached
+                snapshot.appShares = previous.appShares
                 snapshot.fetchedAt = previous.fetchedAt
             }
+            snapshot.tokens = tokens[snapshot.id]
             snapshots[snapshot.id] = snapshot
             alerts += AlertEvaluator.evaluate(
                 fresh, thresholds: settings.thresholds, notifyOnReset: settings.notifyOnReset, state: &alertState
@@ -168,6 +181,9 @@ final class AppModel {
         }
 
         lastRefresh = Date()
+        // Drop cached snapshots for accounts that were removed.
+        let ids = Set(accounts.map(\.id))
+        snapshots = snapshots.filter { ids.contains($0.key) }
         persist(Array(snapshots.values), key: Keys.snapshots)
         persist(alertState, key: Keys.alertState)
         persist(lastActivity, key: Keys.lastActivity)

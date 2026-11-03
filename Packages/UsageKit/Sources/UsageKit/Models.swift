@@ -92,9 +92,22 @@ public struct UsageWindow: Codable, Hashable, Sendable, Identifiable {
     public var isExhausted: Bool { usedPercent >= 100 }
 }
 
+/// One app's share of an account's weekly usage, as Claude reports it ("Claude Code 70%").
+public struct AppShare: Codable, Hashable, Sendable {
+    public var name: String
+    public var percent: Double
+
+    public init(name: String, percent: Double) {
+        self.name = name
+        self.percent = percent
+    }
+}
+
 /// Usage as returned by one provider fetch, before it is attached to an account.
 public struct ProviderUsage: Hashable, Sendable {
     public var windows: [UsageWindow]
+    /// How this week's usage splits across apps. Only Claude reports this.
+    public var appShares: [AppShare] = []
     public var plan: String?
     public var identity: String?
     /// The provider says requests are currently blocked, even if no window shows 100%.
@@ -118,6 +131,10 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
     public var limitReached: Bool
     public var fetchedAt: Date
     public var error: String?
+    /// How this week's usage splits across apps (Claude only).
+    public var appShares: [AppShare]?
+    /// Tokens counted from this Mac's CLI logs (Claude Code and Codex accounts only).
+    public var tokens: TokenTotals?
 
     public init(
         id: UUID,
@@ -152,6 +169,7 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
             limitReached: usage.limitReached,
             fetchedAt: fetchedAt
         )
+        appShares = usage.appShares.isEmpty ? nil : usage.appShares
     }
 
     /// Highest utilization across all windows.

@@ -207,6 +207,18 @@ public struct AccountCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            if snapshot.tokens != nil || !(snapshot.appShares ?? []).isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let tokens = snapshot.tokens { TokenRow(tokens: tokens) }
+                    if let shares = snapshot.appShares, !shares.isEmpty {
+                        Text("This week: " + shares.map { "\($0.name) \(Int($0.percent.rounded()))%" }.joined(separator: " · "))
+                            .help("How this account's weekly usage splits across Claude apps")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -219,6 +231,35 @@ public struct AccountCard: View {
     private var limitedText: String {
         guard let until = snapshot.unblockedAt else { return "Limit reached" }
         return "Limited\nback in \(UsageStyle.countdown(to: until, now: now))"
+    }
+}
+
+/// Tokens counted from this Mac's CLI logs, with the breakdown on hover.
+struct TokenRow: View {
+    let tokens: TokenTotals
+
+    var body: some View {
+        HStack {
+            Label("Tokens", systemImage: "number")
+            Spacer()
+            Text("today \(Self.short(tokens.today.total)) · 7 days \(Self.short(tokens.lastSevenDays.total))")
+                .monospacedDigit()
+        }
+        .help(Self.breakdown(tokens.lastSevenDays))
+    }
+
+    static func short(_ count: Int) -> String {
+        count.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)))
+    }
+
+    static func breakdown(_ counts: TokenCounts) -> String {
+        """
+        Last 7 days on this Mac
+        Input: \(short(counts.input))
+        Output: \(short(counts.output))
+        Cache reads: \(short(counts.cacheRead))
+        Cache writes: \(short(counts.cacheWrite))
+        """
     }
 }
 
