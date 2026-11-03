@@ -58,11 +58,14 @@ private struct AccountsSettings: View {
                 } label: {
                     Label("Add Account", systemImage: "plus")
                 }
+                .menuStyle(.button)
+                .buttonStyle(.glass)
                 .fixedSize()
 
-                Button("Remove") {
+                Button("Remove", systemImage: "minus") {
                     if let account = model.accounts.first(where: { $0.id == selection }) { model.remove(account) }
                 }
+                .buttonStyle(.glass)
                 .disabled(selection == nil)
 
                 Spacer()

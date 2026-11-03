@@ -1,9 +1,9 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "UsageKit",
-    platforms: [.macOS(.v14), .iOS(.v17)],
+    platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
         .library(name: "UsageKit", targets: ["UsageKit"]),
     ],

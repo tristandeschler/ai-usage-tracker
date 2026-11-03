@@ -24,7 +24,7 @@ These are undocumented endpoints that the official apps use, so they can change 
 
 ## Build
 
-Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+Requires macOS 26 / iOS 26 (Liquid Glass), Xcode 26+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
 make test        # UsageKit unit tests

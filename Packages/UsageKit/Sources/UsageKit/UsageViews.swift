@@ -24,19 +24,25 @@ public enum UsageStyle {
         if hours > 0 { return "\(hours)h \(minutes)m" }
         return "\(max(minutes, 1))m"
     }
+
+    public static let cardCornerRadius: CGFloat = 20
 }
 
 public struct ProviderBadge: View {
     let provider: ProviderKind
+    let size: CGFloat
 
-    public init(_ provider: ProviderKind) { self.provider = provider }
+    public init(_ provider: ProviderKind, size: CGFloat = 22) {
+        self.provider = provider
+        self.size = size
+    }
 
     public var body: some View {
         Text(provider == .anthropic ? "A" : "O")
-            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .font(.system(size: size * 0.5, weight: .bold, design: .rounded))
             .foregroundStyle(.white)
-            .frame(width: 16, height: 16)
-            .background(UsageStyle.providerColor(provider), in: RoundedRectangle(cornerRadius: 4))
+            .frame(width: size, height: size)
+            .background(UsageStyle.providerColor(provider).gradient, in: Circle())
             .accessibilityLabel(provider.displayName)
     }
 }
@@ -47,16 +53,42 @@ public struct UsageBar: View {
     public init(percent: Double) { self.percent = percent }
 
     public var body: some View {
+        let color = UsageStyle.color(for: percent)
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(.quaternary)
+                Capsule().fill(.primary.opacity(0.08))
                 Capsule()
-                    .fill(UsageStyle.color(for: percent))
-                    .frame(width: proxy.size.width * min(max(percent, 0), 100) / 100)
+                    .fill(LinearGradient(colors: [color.opacity(0.7), color], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: max(proxy.size.height, proxy.size.width * min(max(percent, 0), 100) / 100))
+                    .opacity(percent > 0 ? 1 : 0)
             }
         }
-        .frame(height: 6)
+        .frame(height: 7)
         .accessibilityValue("\(Int(percent)) percent")
+    }
+}
+
+/// Ring showing an account's highest usage.
+public struct UsageRing: View {
+    let percent: Double?
+
+    public init(percent: Double?) { self.percent = percent }
+
+    public var body: some View {
+        let value = min(max(percent ?? 0, 0), 100) / 100
+        let color = UsageStyle.color(for: percent ?? 0)
+        ZStack {
+            Circle().stroke(.primary.opacity(0.08), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: value)
+                .stroke(color.gradient, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text(percent.map { "\(Int($0.rounded()))" } ?? "–")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+        }
+        .frame(width: 36, height: 36)
+        .accessibilityLabel("Highest usage \(Int(percent ?? 0)) percent")
     }
 }
 
@@ -70,26 +102,29 @@ public struct WindowRow: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(window.label)
+                    .font(.subheadline)
                 Spacer()
+                if let resetsAt = window.resetsAt {
+                    Text("resets in \(UsageStyle.countdown(to: resetsAt, now: now))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help(resetsAt.formatted(date: .abbreviated, time: .shortened))
+                }
                 Text("\(Int(window.usedPercent.rounded()))%")
+                    .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
-                    .fontWeight(.medium)
                     .foregroundStyle(window.isExhausted ? .red : .primary)
+                    .frame(minWidth: 36, alignment: .trailing)
             }
-            .font(.callout)
             UsageBar(percent: window.usedPercent)
-            if let resetsAt = window.resetsAt {
-                Text("Resets in \(UsageStyle.countdown(to: resetsAt, now: now)) · \(resetsAt.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 }
 
+/// An account's usage, without a background; see `AccountGlassCard` for the styled version.
 public struct AccountCard: View {
     let snapshot: AccountSnapshot
     let now: Date
@@ -100,37 +135,77 @@ public struct AccountCard: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
                 ProviderBadge(snapshot.provider)
-                Text(snapshot.accountName).font(.headline).lineLimit(1)
-                if let plan = snapshot.plan {
-                    Text(plan)
-                        .font(.caption2.weight(.medium))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.quaternary, in: Capsule())
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(snapshot.accountName)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 if snapshot.isLimited {
-                    Label("Limited", systemImage: "exclamationmark.octagon.fill")
-                        .labelStyle(.iconOnly)
+                    Text(limitedText)
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.red)
+                        .multilineTextAlignment(.trailing)
+                } else {
+                    UsageRing(percent: snapshot.peakPercent)
                 }
             }
-            if let identity = snapshot.identity, identity != snapshot.accountName {
-                Text(identity).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
+
             if let error = snapshot.error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(snapshot.windows) { WindowRow(window: $0, now: now) }
-            if snapshot.windows.isEmpty && snapshot.error == nil {
-                Text("No active limits right now").font(.caption).foregroundStyle(.secondary)
+
+            if !snapshot.windows.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(snapshot.windows) { WindowRow(window: $0, now: now) }
+                }
+            } else if snapshot.error == nil {
+                Text("No active limits right now")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var subtitle: String {
+        let parts = [snapshot.plan, snapshot.identity == snapshot.accountName ? nil : snapshot.identity]
+            .compactMap { $0 }
+        return parts.isEmpty ? snapshot.provider.displayName : parts.joined(separator: " · ")
+    }
+
+    private var limitedText: String {
+        guard let until = snapshot.unblockedAt else { return "Limit reached" }
+        return "Limited\nback in \(UsageStyle.countdown(to: until, now: now))"
+    }
+}
+
+/// `AccountCard` on a Liquid Glass panel, tinted red while the account is limited.
+public struct AccountGlassCard: View {
+    let snapshot: AccountSnapshot
+    let now: Date
+
+    public init(snapshot: AccountSnapshot, now: Date = Date()) {
+        self.snapshot = snapshot
+        self.now = now
+    }
+
+    public var body: some View {
+        AccountCard(snapshot: snapshot, now: now)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(
+                snapshot.isLimited ? .regular.tint(.red.opacity(0.2)) : .regular,
+                in: .rect(cornerRadius: UsageStyle.cardCornerRadius)
+            )
     }
 }

@@ -6,85 +6,112 @@ struct MenuContentView: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 12) {
             header
-            Divider()
             if model.orderedSnapshots.isEmpty {
                 emptyState
             } else {
                 ScrollView {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
-                        VStack(alignment: .leading, spacing: 14) {
-                            ForEach(model.orderedSnapshots) { snapshot in
-                                AccountCard(snapshot: snapshot, now: context.date)
-                                if snapshot.id != model.orderedSnapshots.last?.id { Divider() }
+                        GlassEffectContainer(spacing: 10) {
+                            VStack(spacing: 10) {
+                                ForEach(model.orderedSnapshots) { snapshot in
+                                    AccountGlassCard(snapshot: snapshot, now: context.date)
+                                }
                             }
                         }
-                        .padding(14)
                     }
                 }
-                .frame(maxHeight: 560)
+                .scrollIndicators(.never)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: 600)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            Divider()
             footer
         }
-        .frame(width: 340)
+        .padding(12)
+        .frame(width: 360)
     }
 
     private var header: some View {
-        HStack {
-            Text("Token Tracker").font(.headline)
-            Spacer()
-            if let lastRefresh = model.lastRefresh {
-                Text(lastRefresh, format: .dateTime.hour().minute())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .help("Last refreshed")
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Token Tracker").font(.title3.weight(.semibold))
+                Group {
+                    if model.limitedCount > 0 {
+                        Text("\(model.limitedCount) account\(model.limitedCount == 1 ? "" : "s") limited")
+                            .foregroundStyle(.red)
+                    } else if let lastRefresh = model.lastRefresh {
+                        Text("Updated \(lastRefresh.formatted(date: .omitted, time: .shortened))")
+                    } else {
+                        Text("Loading…")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
+            Spacer()
             Button {
                 Task { await model.refresh() }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .rotationEffect(.degrees(model.isRefreshing ? 360 : 0))
-                    .animation(model.isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: model.isRefreshing)
+                    .symbolEffect(.rotate, isActive: model.isRefreshing)
+                    .frame(width: 18, height: 18)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
             .keyboardShortcut("r")
             .help("Refresh now")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "person.crop.circle.badge.plus").font(.largeTitle).foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            Image(systemName: "person.crop.circle.badge.plus")
+                .font(.system(size: 34))
+                .foregroundStyle(.secondary)
             Text("No accounts yet").font(.headline)
-            Text("Add your Claude and ChatGPT accounts in Settings.")
+            Text("Add your Claude and ChatGPT accounts to start tracking limits.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Add Account…") { showSettings() }
+                .buttonStyle(.glassProminent)
         }
         .padding(24)
+        .frame(maxWidth: .infinity)
+        .glassEffect(.regular, in: .rect(cornerRadius: UsageStyle.cardCornerRadius))
     }
 
     private var footer: some View {
-        HStack {
-            Button("Settings…") { showSettings() }
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    showSettings()
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
                 .keyboardShortcut(",")
-            Spacer()
-            if let syncError = model.syncError {
-                Image(systemName: "icloud.slash")
-                    .foregroundStyle(.orange)
-                    .help("iCloud sync failed: \(syncError)")
-            }
-            Button("Quit") { NSApp.terminate(nil) }
+
+                if let syncError = model.syncError {
+                    Image(systemName: "icloud.slash")
+                        .foregroundStyle(.orange)
+                        .help("iCloud sync failed: \(syncError)")
+                }
+
+                Spacer()
+
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    Label("Quit", systemImage: "power")
+                }
                 .keyboardShortcut("q")
+            }
+            .buttonStyle(.glass)
+            .controlSize(.regular)
         }
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
     }
 
     private func showSettings() {
