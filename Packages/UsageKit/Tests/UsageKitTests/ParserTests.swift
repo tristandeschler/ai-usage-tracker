@@ -47,11 +47,6 @@ func fixture(_ name: String) throws -> Data {
         #expect(creds.subscriptionType == "max")
     }
 
-    @Test func appBreakdown() throws {
-        let usage = try ClaudeUsageParser.parse(try fixture("claude-oauth-usage"))
-        #expect(usage.appShares == [AppShare(name: "Claude Code", percent: 70), AppShare(name: "Chats", percent: 30)])
-    }
-
     @Test func organizationsDropApiOnlyAndPreferPaid() throws {
         let json = #"""
         [{"uuid":"api","name":"API","capabilities":["api"]},

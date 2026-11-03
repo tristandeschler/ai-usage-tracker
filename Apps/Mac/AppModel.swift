@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import ServiceManagement
 import UsageKit
+import WidgetKit
 
 enum MenuBarMode: String, Codable, CaseIterable {
     /// The account whose usage went up most recently.
@@ -161,7 +162,6 @@ final class AppModel {
                 snapshot.plan = previous.plan
                 snapshot.identity = previous.identity
                 snapshot.limitReached = previous.limitReached
-                snapshot.appShares = previous.appShares
                 snapshot.fetchedAt = previous.fetchedAt
             }
             snapshots[snapshot.id] = snapshot
@@ -179,6 +179,17 @@ final class AppModel {
         persist(lastActivity, key: Keys.lastActivity)
 
         for alert in alerts { notifier.post(alert) }
+        publishToWidgets()
+    }
+
+    /// Hands the latest numbers to the widgets through the shared app group.
+    private func publishToWidgets() {
+        do {
+            try SharedSnapshots(snapshots: orderedSnapshots, featuredAccountID: menuBarSnapshot?.id).save()
+            WidgetCenter.shared.reloadAllTimelines()
+        } catch {
+            NSLog("Couldn't update widgets: \(error)")
+        }
     }
 
     // MARK: Accounts
@@ -285,7 +296,10 @@ final class AppModel {
         saveAccounts()
     }
 
-    private func saveAccounts() { persist(accounts, key: Keys.accounts) }
+    private func saveAccounts() {
+        persist(accounts, key: Keys.accounts)
+        publishToWidgets()
+    }
 
     // MARK: Persistence
 

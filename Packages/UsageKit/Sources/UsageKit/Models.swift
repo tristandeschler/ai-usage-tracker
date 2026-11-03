@@ -106,22 +106,9 @@ public struct UsageWindow: Codable, Hashable, Sendable, Identifiable {
     public var isExhausted: Bool { usedPercent >= 100 }
 }
 
-/// One app's share of an account's weekly usage, as Claude reports it ("Claude Code 70%").
-public struct AppShare: Codable, Hashable, Sendable {
-    public var name: String
-    public var percent: Double
-
-    public init(name: String, percent: Double) {
-        self.name = name
-        self.percent = percent
-    }
-}
-
 /// Usage as returned by one provider fetch, before it is attached to an account.
 public struct ProviderUsage: Hashable, Sendable {
     public var windows: [UsageWindow]
-    /// How this week's usage splits across apps. Only Claude reports this.
-    public var appShares: [AppShare] = []
     /// API accounts: organization-wide tokens and spend for the last 7 days.
     public var tokens: TokenTotals?
     public var spend: SpendTotals?
@@ -149,8 +136,6 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
     public var limitReached: Bool
     public var fetchedAt: Date
     public var error: String?
-    /// How this week's usage splits across apps (Claude only).
-    public var appShares: [AppShare]?
     /// API accounts: organization-wide tokens and spend for the last 7 days.
     public var tokens: TokenTotals?
     public var spend: SpendTotals?
@@ -190,7 +175,6 @@ public struct AccountSnapshot: Codable, Hashable, Sendable, Identifiable {
             limitReached: usage.limitReached,
             fetchedAt: fetchedAt
         )
-        appShares = usage.appShares.isEmpty ? nil : usage.appShares
         tokens = usage.tokens
         spend = usage.spend
         apiKeys = usage.apiKeys

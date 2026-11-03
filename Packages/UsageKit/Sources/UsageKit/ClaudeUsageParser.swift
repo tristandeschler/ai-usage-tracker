@@ -46,15 +46,7 @@ public enum ClaudeUsageParser {
         var seen = Set<String>()
         windows = windows.filter { seen.insert($0.id).inserted }
 
-        var usage = ProviderUsage(windows: windows)
-        if let rows = (json["seven_day_breakdown"] as? [String: Any])?["rows"] as? [[String: Any]] {
-            usage.appShares = rows.compactMap { row in
-                guard let name = row["display_name"] as? String, let percent = number(row["percent"]), percent > 0
-                else { return nil }
-                return AppShare(name: name, percent: percent)
-            }
-        }
-        return usage
+        return ProviderUsage(windows: windows)
     }
 
     private static func window(_ value: Any?) -> (percent: Double, resetsAt: Date?)? {

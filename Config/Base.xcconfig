@@ -6,4 +6,7 @@ DEVELOPMENT_TEAM =
 // Off by default: it needs a provisioning profile, so Xcode must be signed in to your Apple account.
 TT_ENTITLEMENTS =
 
+// Shared with the widget so it can show the latest numbers (usage only, never credentials).
+TT_APP_GROUP = $(TeamIdentifierPrefix)$(TT_BUNDLE_PREFIX).TokenTracker
+
 #include? "Local.xcconfig"

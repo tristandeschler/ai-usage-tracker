@@ -14,18 +14,21 @@ public struct SpendTotals: Codable, Hashable, Sendable {
     }
 }
 
-/// Tokens used through one API key. The providers don't report spend per key.
+/// Usage through one API key. Spend per key comes from Anthropic's analytics API; OpenAI
+/// doesn't report it.
 public struct APIKeyUsage: Codable, Hashable, Sendable, Identifiable {
     public var id: String
     public var name: String
     public var today: Int
     public var lastSevenDays: Int
+    public var spendLastSevenDays: Double?
 
-    public init(id: String, name: String, today: Int, lastSevenDays: Int) {
+    public init(id: String, name: String, today: Int, lastSevenDays: Int, spendLastSevenDays: Double? = nil) {
         self.id = id
         self.name = name
         self.today = today
         self.lastSevenDays = lastSevenDays
+        self.spendLastSevenDays = spendLastSevenDays
     }
 }
 
@@ -67,17 +70,33 @@ public enum AdminAPIUsage {
     }
 
     /// Per-key totals, busiest first, named from `names` where the provider knows them.
-    static func keys(_ perKey: PerKey, names: [String: String], unattributed: String) -> [APIKeyUsage] {
-        perKey.map { id, counts in
-            APIKeyUsage(
+    /// `spend` (dollars per key over the week) is optional; keys that only show up there are kept.
+    static func keys(_ perKey: PerKey, spend: [String: Double]? = nil, names: [String: String], unattributed: String) -> [APIKeyUsage] {
+        Set(perKey.keys).union(spend?.keys ?? [:].keys).map { id in
+            let counts = perKey[id] ?? []
+            return APIKeyUsage(
                 id: id,
                 name: id.isEmpty ? unattributed : names[id] ?? "Key …\(id.suffix(6))",
                 today: counts.last?.total ?? 0,
-                lastSevenDays: counts.reduce(0) { $0 + $1.total }
+                lastSevenDays: counts.reduce(0) { $0 + $1.total },
+                spendLastSevenDays: spend.map { $0[id] ?? 0 }
             )
         }
-        .filter { $0.lastSevenDays > 0 }
-        .sorted { $0.lastSevenDays > $1.lastSevenDays }
+        .filter { $0.lastSevenDays > 0 || ($0.spendLastSevenDays ?? 0) > 0 }
+        .sorted { ($0.spendLastSevenDays ?? 0, $0.lastSevenDays) > ($1.spendLastSevenDays ?? 0, $1.lastSevenDays) }
+    }
+
+    /// `GET /v1/organizations/analytics/cost?group_by[]=api_key_id` (beta). Rows are flat, one per
+    /// day and key; `cost.amount` is a decimal string in cents. Returns dollars per key for the week.
+    static func parseAnthropicKeySpend(_ pages: [Data], start: Date) throws -> [String: Double] {
+        var spend: [String: Double] = [:]
+        for row in try pages.flatMap(buckets) {
+            guard let date = DateParsing.iso8601(row["starting_at"] as? String), slot(date, start: start) != nil else { continue }
+            let key = ((row["group"] as? [String: Any])?["api_key_id"] as? String) ?? ""
+            let cents = ClaudeUsageParser.number((row["cost"] as? [String: Any])?["amount"]) ?? 0
+            spend[key, default: 0] += cents / 100
+        }
+        return spend
     }
 
     private static func add(_ counts: TokenCounts, key: String?, slot: Int, to perKey: inout PerKey) {
@@ -232,8 +251,22 @@ extension UsageFetcher {
             let costs = try await adminPages("https://api.anthropic.com/v1/organizations/cost_report", query, auth, provider)
             let perKey = try AdminAPIUsage.parseAnthropicTokens(tokens, start: start)
             let names = await APIKeyNameCache.shared.names(for: secretKey) { await anthropicKeyNames(auth) }
+            // Spend per key is a beta API; if it fails, keys just show tokens.
+            let keySpendPages = try? await adminPages(
+                "https://api.anthropic.com/v1/organizations/analytics/cost",
+                [
+                    URLQueryItem(name: "starting_at", value: iso.string(from: start)),
+                    URLQueryItem(name: "ending_at", value: iso.string(from: end)),
+                    URLQueryItem(name: "time_bucket_width", value: "1d"),
+                    URLQueryItem(name: "group_by[]", value: "api_key_id"),
+                    URLQueryItem(name: "order_by", value: "time"),
+                    URLQueryItem(name: "limit", value: "1000"),
+                ],
+                auth + [("anthropic-beta", "analytics-usage-cost-2026-08-24")], provider
+            )
+            let keySpend = keySpendPages.flatMap { try? AdminAPIUsage.parseAnthropicKeySpend($0, start: start) }
             usage.tokens = AdminAPIUsage.totals(perKey)
-            usage.apiKeys = AdminAPIUsage.keys(perKey, names: names, unattributed: "Console & Workbench")
+            usage.apiKeys = AdminAPIUsage.keys(perKey, spend: keySpend, names: names, unattributed: "Console & Workbench")
             usage.spend = SpendTotals(daily: try AdminAPIUsage.parseAnthropicSpend(costs, start: start))
 
         case .openai:

@@ -29,10 +29,12 @@ targets:
         buildPhase: resources
     dependencies:
       - package: UsageKit
+      - target: TokenTrackerWidget
     info:
       path: Apps/Mac/Info.plist
       properties:
         CFBundleDisplayName: Token Tracker
+        TTAppGroup: $(TT_APP_GROUP)
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: ""
@@ -42,6 +44,30 @@ targets:
         # Set TT_ENTITLEMENTS in Config/Local.xcconfig to keep secrets in the data protection keychain.
         CODE_SIGN_ENTITLEMENTS: $(TT_ENTITLEMENTS)
         PRODUCT_NAME: Token Tracker
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: YES
+  TokenTrackerWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Apps/Widget
+      - path: Apps/Shared/Brand.xcassets
+        buildPhase: resources
+    dependencies:
+      - package: UsageKit
+    info:
+      path: Apps/Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Token Tracker
+        TTAppGroup: $(TT_APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(TT_BUNDLE_PREFIX).TokenTracker.Widget
+        PRODUCT_NAME: TokenTrackerWidget
+        CODE_SIGN_ENTITLEMENTS: Apps/Widget/TokenTrackerWidget.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: YES
 schemes:

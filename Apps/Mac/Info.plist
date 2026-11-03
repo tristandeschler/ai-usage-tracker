@@ -26,5 +26,7 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
+	<key>TTAppGroup</key>
+	<string>$(TT_APP_GROUP)</string>
 </dict>
 </plist>
