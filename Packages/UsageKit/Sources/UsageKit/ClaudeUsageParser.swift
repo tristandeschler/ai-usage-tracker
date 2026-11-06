@@ -1,7 +1,6 @@
 import Foundation
 
-/// Parses the usage payload shared by `api.anthropic.com/api/oauth/usage` and
-/// `claude.ai/api/organizations/{org}/usage`.
+/// Parses the payload from `claude.ai/api/organizations/{org}/usage`.
 ///
 /// The payload is loosely typed and grows new codenamed keys often, so this reads it
 /// as a dictionary and only picks out the fields it understands.
@@ -85,7 +84,7 @@ public enum ClaudeUsageParser {
         }
     }
 
-    /// Turns `subscriptionType`/`rateLimitTier` from Claude Code's credentials into e.g. "Ultra".
+    /// Turns a subscription type and `rateLimitTier` into a plan name, e.g. "Ultra".
     public static func planName(subscriptionType: String?, rateLimitTier: String?) -> String? {
         // The 20x tier is now called Ultra, though its tier string still says max_20x. Max 5x stays Max.
         let type = subscriptionType?.lowercased() ?? ""

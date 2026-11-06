@@ -73,20 +73,3 @@ public enum CookieHeader {
         return changed ? pairs.map { "\($0.name)=\($0.value)" }.joined(separator: "; ") : nil
     }
 }
-
-enum JWT {
-    /// Decodes a JWT payload without verifying it; used only to read `exp` and `email`.
-    static func claims(_ token: String) -> [String: Any]? {
-        let parts = token.split(separator: ".")
-        guard parts.count >= 2 else { return nil }
-        var base64 = parts[1].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
-        guard let data = Data(base64Encoded: base64) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    }
-
-    static func expiry(_ token: String) -> Date? {
-        guard let exp = ClaudeUsageParser.number(claims(token)?["exp"]) else { return nil }
-        return Date(timeIntervalSince1970: exp)
-    }
-}

@@ -28,22 +28,26 @@ struct TokenTrackerApp: App {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 520, height: 720)
+
+        Window("Welcome to Token Tracker", id: OnboardingView.windowID) {
+            OnboardingView()
+                .environment(model)
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
     }
 }
 
 extension Notification.Name {
     static let showSettings = Notification.Name("TokenTrackerShowSettings")
+    static let didLaunch = Notification.Name("TokenTrackerDidLaunch")
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let hasLaunchedKey = "hasLaunched"
-
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // A menu bar app has no window, so show Settings on first launch to make it obvious it started.
-        guard !UserDefaults.standard.bool(forKey: Self.hasLaunchedKey) else { return }
-        UserDefaults.standard.set(true, forKey: Self.hasLaunchedKey)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            NotificationCenter.default.post(name: .showSettings, object: nil)
+            NotificationCenter.default.post(name: .didLaunch, object: nil)
         }
     }
 
@@ -57,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct MenuBarLabel: View {
     let model: AppModel
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         let snapshot = model.menuBarSnapshot
@@ -68,10 +73,15 @@ struct MenuBarLabel: View {
                     .monospacedDigit()
             }
         }
-        // The label is the only view that always exists, so it handles requests to show Settings.
+        // The label is the only view that always exists, so it handles requests to show windows.
         .onReceive(NotificationCenter.default.publisher(for: .showSettings)) { _ in
             NSApp.activate()
             openSettings()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .didLaunch)) { _ in
+            guard model.needsOnboarding else { return }
+            NSApp.activate()
+            openWindow(id: OnboardingView.windowID)
         }
     }
 

@@ -1,8 +1,7 @@
 import Foundation
 
 public struct UsageFetcher: Sendable {
-    /// How the app identifies itself to the token-based endpoints. It never claims to be
-    /// Claude Code or the Codex CLI.
+    /// How the app identifies itself when it isn't replaying a browser session.
     public static let appUserAgent = "TokenTracker/0.2 (+https://github.com/tristandeschler/ai-usage-tracker)"
 
     /// Used for pasted web sessions. Sign-ins through the app store the web view's own UA instead
@@ -12,12 +11,10 @@ public struct UsageFetcher: Sendable {
 
     public var http: any HTTPClient
     public var secrets: any SecretStore
-    public var claudeCode: (any ClaudeCodeCredentialProvider)?
 
-    public init(http: any HTTPClient, secrets: any SecretStore, claudeCode: (any ClaudeCodeCredentialProvider)?) {
+    public init(http: any HTTPClient, secrets: any SecretStore) {
         self.http = http
         self.secrets = secrets
-        self.claudeCode = claudeCode
     }
 
     /// Fetches an account and folds failures into the snapshot so the UI can show them inline.
@@ -34,9 +31,7 @@ public struct UsageFetcher: Sendable {
 
     public func usage(for account: AccountConfig) async throws -> ProviderUsage {
         switch account.source {
-        case .claudeCode: try await claudeCodeUsage()
         case let .claudeWeb(organizationID): try await claudeWebUsage(secretKey: account.id.uuidString, organizationID: organizationID)
-        case let .codexCLI(path): try await codexCLIUsage(path: path)
         case .chatGPTWeb: try await chatGPTWebUsage(secretKey: account.id.uuidString)
         case .anthropicAdmin: try await adminUsage(provider: .anthropic, secretKey: account.id.uuidString)
         case .openAIAdmin: try await adminUsage(provider: .openai, secretKey: account.id.uuidString)
@@ -51,28 +46,6 @@ public struct UsageFetcher: Sendable {
     }
 
     // MARK: Claude
-
-    private func claudeCodeUsage() async throws -> ProviderUsage {
-        guard let claudeCode else { throw UsageError.notSignedIn("Claude Code logins only work on a Mac.") }
-        let credentials = try claudeCode.load()
-        if let expiresAt = credentials.expiresAt, expiresAt < Date() {
-            throw UsageError.expired("Open Claude Code once to refresh its login.")
-        }
-
-        var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
-        request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(Self.appUserAgent, forHTTPHeaderField: "User-Agent")
-
-        let (data, response) = try await http.send(request)
-        try check(response, data: data, reauthHint: "Run `claude` and sign in again.")
-        var usage = try ClaudeUsageParser.parse(data)
-        usage.plan = ClaudeUsageParser.planName(
-            subscriptionType: credentials.subscriptionType, rateLimitTier: credentials.rateLimitTier
-        )
-        return usage
-    }
 
     /// Lists the organizations a claude.ai session can see, so the user can pick which to track.
     public func claudeOrganizations(cookies: String, userAgent: String?) async throws -> [ClaudeOrganization] {
@@ -126,19 +99,6 @@ public struct UsageFetcher: Sendable {
 
     // MARK: OpenAI
 
-    /// Reads the Codex login read-only. Codex refreshes its own token, so an expired one just
-    /// means running `codex` once.
-    private func codexCLIUsage(path: String) async throws -> ProviderUsage {
-        let auth = try CodexAuthFile.load(path: path)
-        let hint = "Run `codex` once to refresh its login."
-        if auth.isExpired { throw UsageError.expired(hint) }
-        do {
-            return try await whamUsage(bearer: auth.accessToken, accountID: auth.accountID, cookies: nil, userAgent: nil, fallbackEmail: auth.email)
-        } catch UsageError.unauthorized {
-            throw UsageError.expired(hint)
-        }
-    }
-
     private func chatGPTWebUsage(secretKey: String) async throws -> ProviderUsage {
         let hint = "Sign in to chatgpt.com again from Settings → Accounts."
         guard let cookies = try secrets.read(secretKey), !cookies.isEmpty else { throw UsageError.notSignedIn(hint) }
@@ -166,18 +126,14 @@ public struct UsageFetcher: Sendable {
     }
 
     private func whamUsage(
-        bearer: String, accountID: String?, cookies: String?, userAgent: String?, fallbackEmail: String?
+        bearer: String, accountID: String?, cookies: String, userAgent: String, fallbackEmail: String?
     ) async throws -> ProviderUsage {
         var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!)
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let accountID { request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id") }
-        if let cookies {
-            request.setValue(cookies, forHTTPHeaderField: "Cookie")
-            request.setValue(userAgent ?? Self.browserUserAgent, forHTTPHeaderField: "User-Agent")
-        } else {
-            request.setValue(Self.appUserAgent, forHTTPHeaderField: "User-Agent")
-        }
+        request.setValue(cookies, forHTTPHeaderField: "Cookie")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await http.send(request)
         try check(response, data: data, reauthHint: "Sign in again.")

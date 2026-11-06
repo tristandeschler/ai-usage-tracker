@@ -39,14 +39,6 @@ func fixture(_ name: String) throws -> Data {
         #expect(ClaudeUsageParser.planName(subscriptionType: nil, rateLimitTier: nil) == nil)
     }
 
-    @Test func parsesClaudeCodeCredentials() throws {
-        let json = #"{"claudeAiOauth":{"accessToken":"tok","refreshToken":"r","expiresAt":1793989910000,"subscriptionType":"max","rateLimitTier":"default_claude_max_20x"}}"#
-        let creds = try ClaudeCodeCredentials.parse(Data(json.utf8))
-        #expect(creds.accessToken == "tok")
-        #expect(creds.expiresAt == Date(timeIntervalSince1970: 1_793_989_910))
-        #expect(creds.subscriptionType == "max")
-    }
-
     @Test func organizationsDropApiOnlyAndPreferPaid() throws {
         let json = #"""
         [{"uuid":"api","name":"API","capabilities":["api"]},
@@ -83,23 +75,6 @@ func fixture(_ name: String) throws -> Data {
         #expect(usage.windows[2].label == "Weekly · GPT-5.3-Codex-Spark")
     }
 
-    @Test func parsesAuthFile() throws {
-        // Header/payload only; the parser never verifies signatures.
-        let payload = Data(#"{"email":"me@example.com","exp":1}"#.utf8).base64EncodedString()
-            .replacingOccurrences(of: "=", with: "")
-        let idToken = "e30.\(payload).sig"
-        let json = #"{"auth_mode":"chatgpt","tokens":{"access_token":"e30.\#(payload).sig","refresh_token":"r","id_token":"\#(idToken)","account_id":"acct"}}"#
-        let auth = try CodexAuthFile.parse(Data(json.utf8))
-        #expect(auth.accountID == "acct")
-        #expect(auth.email == "me@example.com")
-        #expect(auth.isExpired)
-    }
-
-    @Test func authFileWithoutTokensIsNotSignedIn() {
-        #expect(throws: UsageError.self) {
-            try CodexAuthFile.parse(Data(#"{"OPENAI_API_KEY":"sk-..."}"#.utf8))
-        }
-    }
 }
 
 @Suite struct CookieHeaderTests {
@@ -111,5 +86,65 @@ func fixture(_ name: String) throws -> Data {
         let merged = CookieHeader.merging("a=1; session=old", response: response)
         #expect(merged == "a=1; session=new")
         #expect(CookieHeader.merging("a=1; session=new", response: response) == nil)
+    }
+}
+
+@Suite struct SavedAccountTests {
+    @Test func skipsRemovedSourcesWithoutLosingTheRest() throws {
+        let kept = AccountConfig(name: "Work", source: .claudeWeb(organizationID: "org"))
+        let keptJSON = String(decoding: try JSONEncoder().encode(kept), as: UTF8.self)
+        let json = #"""
+        [{"id":"7D1F1C7E-0C1B-4B39-9F5D-0A1A7B7C0001","name":"Claude Code","source":{"claudeCode":{}},"isEnabled":true},
+         \#(keptJSON),
+         {"id":"7D1F1C7E-0C1B-4B39-9F5D-0A1A7B7C0002","name":"Codex","source":{"codexCLI":{"authFilePath":"/x"}},"isEnabled":true}]
+        """#
+        let saved = AccountConfig.decodeSaved(Data(json.utf8))
+        #expect(saved.accounts == [kept])
+        #expect(saved.skipped == 2)
+    }
+
+    @Test func currentListRoundTrips() throws {
+        let accounts = [AccountConfig(name: "a", source: .chatGPTWeb), AccountConfig(name: "b", source: .anthropicAdmin)]
+        let saved = AccountConfig.decodeSaved(try JSONEncoder().encode(accounts))
+        #expect(saved.accounts == accounts)
+        #expect(saved.skipped == 0)
+    }
+}
+
+@Suite struct RenewSignInTests {
+    private func snapshot(_ account: AccountConfig, identity: String, plan: String) -> [UUID: AccountSnapshot] {
+        [account.id: AccountSnapshot(id: account.id, accountName: account.name, provider: account.provider, plan: plan, identity: identity)]
+    }
+
+    @Test func claudeMatchesByOrganization() {
+        let account = AccountConfig(name: "Renamed", source: .claudeWeb(organizationID: "org"))
+        let usage = ProviderUsage(windows: [], plan: "Max", identity: "Someone")
+        #expect(AccountConfig.existing(in: [account], source: .claudeWeb(organizationID: "org"), usage: usage, snapshots: [:]) == account)
+        #expect(AccountConfig.existing(in: [account], source: .claudeWeb(organizationID: "other"), usage: usage, snapshots: [:]) == nil)
+    }
+
+    @Test func chatGPTMatchesByIdentityAndPlan() {
+        let account = AccountConfig(name: "Mine", source: .chatGPTWeb)
+        let snapshots = snapshot(account, identity: "me@example.com", plan: "Pro")
+        let same = ProviderUsage(windows: [], plan: "Pro", identity: "me@example.com")
+        let otherWorkspace = ProviderUsage(windows: [], plan: "Team", identity: "me@example.com")
+        let otherEmail = ProviderUsage(windows: [], plan: "Pro", identity: "you@example.com")
+        #expect(AccountConfig.existing(in: [account], source: .chatGPTWeb, usage: same, snapshots: snapshots) == account)
+        #expect(AccountConfig.existing(in: [account], source: .chatGPTWeb, usage: otherWorkspace, snapshots: snapshots) == nil)
+        #expect(AccountConfig.existing(in: [account], source: .chatGPTWeb, usage: otherEmail, snapshots: snapshots) == nil)
+    }
+
+    @Test func olderClaudeAccountWithoutOrganizationMatchesByIdentity() {
+        let account = AccountConfig(name: "Old", source: .claudeWeb(organizationID: nil))
+        let snapshots = snapshot(account, identity: "me@example.com", plan: "Max")
+        let usage = ProviderUsage(windows: [], plan: "Max", identity: "me@example.com")
+        #expect(AccountConfig.existing(in: [account], source: .claudeWeb(organizationID: "org"), usage: usage, snapshots: snapshots) == account)
+    }
+
+    @Test func neverMatchesAcrossProviders() {
+        let account = AccountConfig(name: "Mine", source: .chatGPTWeb)
+        let snapshots = snapshot(account, identity: "me@example.com", plan: "Pro")
+        let usage = ProviderUsage(windows: [], plan: "Pro", identity: "me@example.com")
+        #expect(AccountConfig.existing(in: [account], source: .claudeWeb(organizationID: "org"), usage: usage, snapshots: snapshots) == nil)
     }
 }

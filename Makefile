@@ -1,17 +1,13 @@
 DERIVED := build
 APP := $(DERIVED)/Build/Products/Debug/Token Tracker.app
 
-.PHONY: project test live-test build run install release clean
+.PHONY: project test build run install release clean
 
 project:
 	xcodegen generate
 
 test:
 	cd Packages/UsageKit && swift test
-
-# Hits the real endpoints with this Mac's Claude Code and Codex logins.
-live-test:
-	cd Packages/UsageKit && LIVE=1 swift test --filter LiveTests
 
 build: project
 	xcodebuild -project TokenTracker.xcodeproj -scheme TokenTrackerMac -configuration Debug \

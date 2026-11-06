@@ -14,13 +14,9 @@ public enum ProviderKind: String, Codable, Sendable, CaseIterable {
 
 /// Where an account's credentials come from.
 public enum CredentialSource: Codable, Hashable, Sendable {
-    /// The account currently signed in to Claude Code on this Mac (read from its Keychain item).
-    case claudeCode
     /// claude.ai browser cookies, stored in our own Keychain under the account id. One login can
     /// reach several organizations; nil tracks the paid personal one.
     case claudeWeb(organizationID: String?)
-    /// A Codex CLI `auth.json` (one per `CODEX_HOME`).
-    case codexCLI(authFilePath: String)
     /// chatgpt.com browser cookies, stored in our own Keychain under the account id.
     case chatGPTWeb
     /// An Anthropic Admin API key (stored in our Keychain) for organization-wide API usage and spend.
@@ -30,35 +26,25 @@ public enum CredentialSource: Codable, Hashable, Sendable {
 
     public var provider: ProviderKind {
         switch self {
-        case .claudeCode, .claudeWeb, .anthropicAdmin: .anthropic
-        case .codexCLI, .chatGPTWeb, .openAIAdmin: .openai
+        case .claudeWeb, .anthropicAdmin: .anthropic
+        case .chatGPTWeb, .openAIAdmin: .openai
         }
     }
 
     public var displayName: String {
         switch self {
-        case .claudeCode: "Claude Code login"
         case .claudeWeb: "claude.ai session"
-        case .codexCLI: "Codex CLI login"
         case .chatGPTWeb: "chatgpt.com session"
         case .anthropicAdmin: "Anthropic Admin API key"
         case .openAIAdmin: "OpenAI Admin API key"
         }
     }
 
-    /// Whether the secret lives in TokenTracker's own Keychain (vs. a file or another app's item).
     /// API usage accounts report spend and tokens instead of plan limits.
     public var isAPI: Bool {
         switch self {
         case .anthropicAdmin, .openAIAdmin: true
         default: false
-        }
-    }
-
-    public var usesStoredSecret: Bool {
-        switch self {
-        case .claudeWeb, .chatGPTWeb, .anthropicAdmin, .openAIAdmin: true
-        case .claudeCode, .codexCLI: false
         }
     }
 }
@@ -77,6 +63,35 @@ public struct AccountConfig: Codable, Identifiable, Hashable, Sendable {
     }
 
     public var provider: ProviderKind { source.provider }
+
+    /// Decodes the saved account list, skipping entries this version can't read (such as the Claude
+    /// Code and Codex CLI logins it no longer supports) instead of losing the whole list.
+    public static func decodeSaved(_ data: Data) -> (accounts: [AccountConfig], skipped: Int) {
+        struct Entry: Decodable {
+            let account: AccountConfig?
+            init(from decoder: Decoder) { account = try? AccountConfig(from: decoder) }
+        }
+        let entries = (try? JSONDecoder().decode([Entry].self, from: data)) ?? []
+        let accounts = entries.compactMap(\.account)
+        return (accounts, entries.count - accounts.count)
+    }
+
+    /// The tracked account a fresh sign-in belongs to, if any, so signing in again renews that
+    /// account rather than adding a duplicate. Snapshots keep their identity and plan after a
+    /// login expires. The plan tells apart two ChatGPT workspaces on one email.
+    public static func existing(
+        in accounts: [AccountConfig], source: CredentialSource, usage: ProviderUsage, snapshots: [UUID: AccountSnapshot]
+    ) -> AccountConfig? {
+        if case .claudeWeb(.some) = source, let exact = accounts.first(where: { $0.source == source }) { return exact }
+        guard let identity = usage.identity else { return nil }
+        return accounts.first { account in
+            guard account.source == .chatGPTWeb || account.source == .claudeWeb(organizationID: nil),
+                  account.provider == source.provider,
+                  let snapshot = snapshots[account.id]
+            else { return false }
+            return snapshot.identity == identity && snapshot.plan == usage.plan
+        }
+    }
 }
 
 public struct UsageWindow: Codable, Hashable, Sendable, Identifiable {
