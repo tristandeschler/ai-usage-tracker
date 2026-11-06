@@ -85,6 +85,8 @@ struct WebSignInView: View {
     /// Set when one login reaches several Claude organizations and the user must pick.
     @State private var pendingSession: PendingSession?
     @State private var selectedOrganizations: Set<String> = []
+    /// Waiting for the paste sheet to go away before closing the window.
+    @State private var closeAfterPaste = false
 
     struct PendingSession {
         var cookies: String
@@ -127,7 +129,7 @@ struct WebSignInView: View {
             }
         }
         .frame(minWidth: 520, minHeight: 640)
-        .sheet(isPresented: $showPaste) {
+        .sheet(isPresented: $showPaste, onDismiss: { if closeAfterPaste { dismiss() } }) {
             PasteSessionSheet(target: target) { cookies in
                 await finish(cookies: cookies, userAgent: nil, name: nil)
             }
@@ -147,7 +149,9 @@ struct WebSignInView: View {
         failed = false
 
         guard target == .claude else {
-            return await add(source: target.source, cookies: cookies, userAgent: userAgent, name: name)
+            if let error = await add(source: target.source, cookies: cookies, userAgent: userAgent, name: name) { return error }
+            close()
+            return nil
         }
 
         let organizations: [ClaudeOrganization]
@@ -156,10 +160,24 @@ struct WebSignInView: View {
         } catch {
             return fail((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
-        if organizations.count == 1, let org = organizations.first {
-            return await add(source: .claudeWeb(organizationID: org.id), cookies: cookies, userAgent: userAgent, name: org.displayName)
+        guard !organizations.isEmpty else { return fail("no Claude organization on this account") }
+        // Signing in again renews every account this login reaches that's already tracked.
+        let untracked = organizations.filter { !model.isTracking(claudeOrganization: $0.id) }
+        for org in organizations where model.isTracking(claudeOrganization: org.id) {
+            if let error = await add(source: .claudeWeb(organizationID: org.id), cookies: cookies, userAgent: userAgent, name: org.displayName) {
+                return error
+            }
         }
-        selectedOrganizations = Set(organizations.filter { !model.isTracking(claudeOrganization: $0.id) }.map(\.id))
+        if organizations.count == 1, let org = untracked.first {
+            if let error = await add(source: .claudeWeb(organizationID: org.id), cookies: cookies, userAgent: userAgent, name: org.displayName) {
+                return error
+            }
+        }
+        if organizations.count == 1 || untracked.isEmpty {
+            close()
+            return nil
+        }
+        selectedOrganizations = Set(untracked.map(\.id))
         pendingSession = PendingSession(cookies: cookies, userAgent: userAgent, organizations: organizations)
         status = "This login has \(organizations.count) Claude accounts. Pick the ones to track."
         return nil
@@ -170,6 +188,10 @@ struct WebSignInView: View {
             return fail(error)
         }
         return nil
+    }
+
+    private func close() {
+        if showPaste { closeAfterPaste = true } else { dismiss() }
     }
 
     private func fail(_ error: String) -> String {

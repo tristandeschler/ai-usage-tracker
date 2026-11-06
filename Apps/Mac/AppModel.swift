@@ -64,6 +64,11 @@ final class AppModel {
         }
     }
 
+    /// Whether to show the sign-in window at launch.
+    var needsOnboarding: Bool { !UserDefaults.standard.bool(forKey: Keys.onboarded) }
+    /// An update removed Claude Code or Codex CLI accounts, so onboarding explains where they went.
+    private(set) var removedLocalLogins = UserDefaults.standard.bool(forKey: Keys.removedLocalLogins)
+
     let secrets = KeychainSecretStore()
     let updater = Updater()
     private let fetcher: UsageFetcher
@@ -77,18 +82,23 @@ final class AppModel {
         static let settings = "settings"
         static let alertState = "alertState"
         static let lastActivity = "lastActivity"
+        static let onboarded = "onboarded"
+        static let removedLocalLogins = "removedLocalLogins"
     }
 
     init() {
-        fetcher = UsageFetcher(http: URLSession.isolated, secrets: secrets, claudeCode: ClaudeCodeKeychainReader())
-        accounts = load(Keys.accounts) ?? []
+        fetcher = UsageFetcher(http: URLSession.isolated, secrets: secrets)
+        let saved = AccountConfig.decodeSaved(UserDefaults.standard.data(forKey: Keys.accounts) ?? Data())
+        accounts = saved.accounts
         settings = load(Keys.settings) ?? AppSettings()
         alertState = load(Keys.alertState) ?? AlertState()
         lastActivity = load(Keys.lastActivity) ?? [:]
         let cached: [AccountSnapshot] = load(Keys.snapshots) ?? []
         snapshots = Dictionary(uniqueKeysWithValues: cached.map { ($0.id, $0) })
 
-        if accounts.isEmpty { addDetectedLogins() }
+        if saved.skipped > 0 { dropRemovedAccounts() }
+        // Anyone already tracking accounts from before onboarding existed has nothing to do.
+        if !accounts.isEmpty, !removedLocalLogins { UserDefaults.standard.set(true, forKey: Keys.onboarded) }
         notifier.requestAuthorization()
         startPolling()
         configureUpdates()
@@ -234,10 +244,8 @@ final class AppModel {
         snapshots[account.id] = nil
         lastActivity[account.id] = nil
         alertState.forget(accountID: account.id)
-        if account.source.usesStoredSecret {
-            try? secrets.delete(account.id.uuidString)
-            try? secrets.delete(UsageFetcher.userAgentKey(account.id.uuidString))
-        }
+        try? secrets.delete(account.id.uuidString)
+        try? secrets.delete(UsageFetcher.userAgentKey(account.id.uuidString))
         saveAccounts()
         persist(alertState, key: Keys.alertState)
     }
@@ -255,8 +263,9 @@ final class AppModel {
         saveAccounts()
     }
 
-    /// Checks a web session against the provider, then stores it and adds the account, named after
-    /// the identity the provider reports. Returns an error message instead when the session doesn't work.
+    /// Checks a web session against the provider, then stores it. Renews the account it belongs to
+    /// if that's already tracked, otherwise adds it, named after the identity the provider reports.
+    /// Returns an error message instead when the session doesn't work.
     func addWebAccount(source: CredentialSource, cookieHeader: String, userAgent: String?, suggestedName: String?) async -> String? {
         var account = AccountConfig(name: suggestedName ?? source.provider.displayName, source: source)
         let key = account.id.uuidString
@@ -264,6 +273,16 @@ final class AppModel {
             try secrets.write(cookieHeader, for: key)
             if let userAgent { try secrets.write(userAgent, for: UsageFetcher.userAgentKey(key)) }
             let usage = try await fetcher.usage(for: account)
+            if let existing = AccountConfig.existing(in: accounts, source: source, usage: usage, snapshots: snapshots) {
+                // Reading usage may have rotated the cookies, so copy what's stored now.
+                let renewed = existing.id.uuidString
+                try secrets.write(try secrets.read(key) ?? cookieHeader, for: renewed)
+                if let userAgent { try secrets.write(userAgent, for: UsageFetcher.userAgentKey(renewed)) }
+                try? secrets.delete(key)
+                try? secrets.delete(UsageFetcher.userAgentKey(key))
+                Task { await refresh() }
+                return nil
+            }
             if suggestedName == nil, let identity = usage.identity { account.name = identity }
         } catch {
             try? secrets.delete(key)
@@ -298,20 +317,23 @@ final class AppModel {
         accounts.contains { $0.source == .claudeWeb(organizationID: id) }
     }
 
-    var hasClaudeCodeAccount: Bool { accounts.contains { $0.source == .claudeCode } }
-
-    func hasCodexAccount(path: String) -> Bool {
-        accounts.contains { $0.source == .codexCLI(authFilePath: path) }
+    func finishOnboarding() {
+        UserDefaults.standard.set(true, forKey: Keys.onboarded)
+        UserDefaults.standard.removeObject(forKey: Keys.removedLocalLogins)
+        removedLocalLogins = false
     }
 
-    private func addDetectedLogins() {
-        if (try? ClaudeCodeKeychainReader().load()) != nil {
-            accounts.append(AccountConfig(name: "Claude Code", source: .claudeCode))
+    /// Saves the list without the accounts this version can't read, and forgets their cached state.
+    private func dropRemovedAccounts() {
+        let ids = Set(accounts.map(\.id))
+        for id in snapshots.keys where !ids.contains(id) {
+            snapshots[id] = nil
+            lastActivity[id] = nil
+            alertState.forget(accountID: id)
         }
-        let codexPath = CodexAuthFile.defaultPath()
-        if let auth = try? CodexAuthFile.load(path: codexPath) {
-            accounts.append(AccountConfig(name: auth.email ?? "Codex", source: .codexCLI(authFilePath: codexPath)))
-        }
+        removedLocalLogins = true
+        UserDefaults.standard.set(true, forKey: Keys.removedLocalLogins)
+        UserDefaults.standard.removeObject(forKey: Keys.onboarded)
         saveAccounts()
     }
 

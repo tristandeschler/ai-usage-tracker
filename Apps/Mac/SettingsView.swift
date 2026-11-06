@@ -57,15 +57,8 @@ private struct AccountsSettings: View {
 
             HStack(spacing: 8) {
                 Menu {
-                    Section("Claude") {
-                        Button("Claude Code on this Mac") {
-                            model.add(AccountConfig(name: "Claude Code", source: .claudeCode))
-                        }
-                        .disabled(model.hasClaudeCodeAccount)
+                    Section("Plans") {
                         Button("Sign in to claude.ai…") { signIn(.claude) }
-                    }
-                    Section("ChatGPT / Codex") {
-                        Button("Codex CLI…") { chooseCodexHome() }
                         Button("Sign in to chatgpt.com…") { signIn(.chatGPT) }
                     }
                     Section("API usage") {
@@ -102,29 +95,6 @@ private struct AccountsSettings: View {
         NSApp.activate()
         openWindow(id: WebSignInView.windowID, value: target)
     }
-
-    private func chooseCodexHome() {
-        let panel = NSOpenPanel()
-        panel.message = "Pick the folder Codex keeps its login in (usually ~/.codex). For a second account, log in with a different CODEX_HOME."
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.showsHiddenFiles = true
-        panel.directoryURL = URL(fileURLWithPath: (CodexAuthFile.defaultPath() as NSString).deletingLastPathComponent)
-        NSApp.activate()
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        let path = url.appendingPathComponent("auth.json").path
-        guard !model.hasCodexAccount(path: path) else { return }
-        do {
-            let auth = try CodexAuthFile.load(path: path)
-            model.add(AccountConfig(name: auth.email ?? url.lastPathComponent, source: .codexCLI(authFilePath: path)))
-        } catch {
-            let alert = NSAlert(error: error)
-            alert.messageText = "No Codex login in that folder"
-            alert.informativeText = "Run `CODEX_HOME=\(url.path) codex login`, then try again."
-            alert.runModal()
-        }
-    }
 }
 
 private struct AccountRow: View {
@@ -139,11 +109,10 @@ private struct AccountRow: View {
                 Text(account.name)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
-                Text(detail)
+                Text(account.source.displayName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .truncationMode(.middle)
             }
             Spacer()
             Button("Rename", systemImage: "pencil", action: onRename)
@@ -159,15 +128,6 @@ private struct AccountRow: View {
             .controlSize(.small)
         }
         .padding(.vertical, 4)
-    }
-
-    private var detail: String {
-        switch account.source {
-        case let .codexCLI(path):
-            "\(account.source.displayName) · \((path as NSString).abbreviatingWithTildeInPath)"
-        default:
-            account.source.displayName
-        }
     }
 }
 
