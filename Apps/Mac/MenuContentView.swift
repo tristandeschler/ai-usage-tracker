@@ -14,21 +14,24 @@ struct MenuContentView: View {
             } else {
                 ScrollView {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
-                        GlassEffectContainer(spacing: 10) {
-                            VStack(spacing: 10) {
-                                ForEach(model.orderedSnapshots) { snapshot in
-                                    AccountGlassCard(
-                                        snapshot: snapshot,
-                                        now: context.date,
-                                        isActive: model.settings.menuBarMode == .activeAccount
-                                            && snapshot.id == model.activeAccountID
-                                    )
-                                    .contextMenu { cardMenu(for: snapshot.id) }
-                                }
+                        // No GlassEffectContainer: the cards never merge, and the container's
+                        // shared backdrop got clipped by the scroll view into a grey box.
+                        VStack(spacing: 10) {
+                            ForEach(model.orderedSnapshots) { snapshot in
+                                AccountGlassCard(
+                                    snapshot: snapshot,
+                                    now: context.date,
+                                    isActive: model.settings.menuBarMode == .activeAccount
+                                        && snapshot.id == model.activeAccountID
+                                )
+                                .contextMenu { cardMenu(for: snapshot.id) }
                             }
                         }
+                        // Room for the glass shadow so the scroll view doesn't cut it off square.
+                        .padding(6)
                     }
                 }
+                .padding(-6)
                 .scrollIndicators(.never)
                 .scrollBounceBehavior(.basedOnSize)
                 .frame(maxHeight: 600)
