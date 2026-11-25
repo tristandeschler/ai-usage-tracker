@@ -1,3 +1,5 @@
+<img src="docs/icon.svg" width="96" alt="">
+
 # Token Tracker
 
 > Not affiliated with or endorsed by Anthropic or OpenAI. Claude and ChatGPT are their trademarks.
